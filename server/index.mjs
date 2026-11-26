@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAppServer } from './app.mjs';
@@ -11,7 +12,13 @@ const port = Number(process.env.PORT || 3001);
 const host = process.env.HOST || '127.0.0.1';
 const dbPath = process.env.DB_PATH || path.join(rootDir, 'data', 'bike-archiv.sqlite');
 const distDir = path.join(rootDir, 'dist');
-const serveStatic = process.env.NODE_ENV === 'production';
+const distIndexPath = path.join(distDir, 'index.html');
+const serveStatic =
+  process.env.SERVE_STATIC === 'false'
+    ? false
+    : process.env.NODE_ENV === 'development'
+      ? false
+      : fs.existsSync(distIndexPath);
 
 const db = createDatabase(dbPath);
 seedInitialData(db);

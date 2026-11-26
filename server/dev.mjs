@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 
 const serverProc = spawn(process.execPath, ['server/index.mjs'], {
   stdio: 'inherit',
-  env: process.env,
+  env: { ...process.env, NODE_ENV: 'development' },
 });
 
 const viteBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';

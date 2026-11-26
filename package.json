@@ -8,8 +8,11 @@
     "dev:client": "vite",
     "dev": "node server/dev.mjs",
     "build": "tsc --noEmit && vite build",
-    "start": "NODE_ENV=production node server/index.mjs",
+    "start": "node server/index.mjs",
     "test": "node --test tests/api.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.5.0"
   },
   "dependencies": {
     "lucide-react": "^0.511.0",
