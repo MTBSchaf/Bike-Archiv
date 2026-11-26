@@ -1,0 +1,9 @@
+.env*
+.git-askpass-*
+.board_job_result_*.json
+.npm-cache/
+.board-runs/
+.board-coord/
+node_modules/
+dist/
+data/
