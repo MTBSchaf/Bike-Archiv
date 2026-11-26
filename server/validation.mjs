@@ -46,6 +46,10 @@ function cleanString(value, fieldLabel, { required = false, maxLength = 500 } = 
   return trimmed;
 }
 
+function cleanRequiredId(value, fieldLabel) {
+  return cleanString(value, fieldLabel, { required: true, maxLength: 100 });
+}
+
 function cleanOptionalId(value, fieldLabel) {
   if (value === undefined || value === null || value === '') {
     return null;
@@ -59,6 +63,17 @@ function cleanOptionalId(value, fieldLabel) {
   }
   if (trimmed.length > 100) {
     throw new ValidationError(`${fieldLabel} ist zu lang.`);
+  }
+  return trimmed;
+}
+
+function cleanTimestamp(value, fallback) {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 64 || Number.isNaN(Date.parse(trimmed))) {
+    return fallback;
   }
   return trimmed;
 }
@@ -227,4 +242,134 @@ export function validateOrderItemInput(body) {
     status: assertEnum(body.status, ORDER_STATUSES, 'Bestellstatus', 'open'),
     notes: cleanString(body.notes, 'Notizen', { required: false, maxLength: 2000 }),
   };
+}
+
+export function validateBackupPayload(raw) {
+  assertObject(raw);
+  if (!Array.isArray(raw.bikes) || !Array.isArray(raw.parts) || !Array.isArray(raw.orderItems)) {
+    throw new ValidationError(
+      'Backup-Datei muss die Listen „bikes“, „parts“ und „orderItems“ enthalten.',
+    );
+  }
+  if (raw.bikes.length > 500) {
+    throw new ValidationError('Backup darf maximal 500 Bikes enthalten.');
+  }
+  if (raw.parts.length > 5000) {
+    throw new ValidationError('Backup darf maximal 5000 Teile enthalten.');
+  }
+  if (raw.orderItems.length > 2000) {
+    throw new ValidationError('Backup darf maximal 2000 Bestellposten enthalten.');
+  }
+
+  const fallbackNow = new Date().toISOString();
+  const bikeIdSet = new Set();
+  const serialIdSet = new Set();
+  const partIdSet = new Set();
+  const orderIdSet = new Set();
+
+  const bikes = raw.bikes.map((entry) => {
+    assertObject(entry);
+    const id = cleanRequiredId(entry.id, 'Fahrrad-ID');
+    if (bikeIdSet.has(id)) {
+      throw new ValidationError(`Doppelte Fahrrad-ID im Backup: ${id}`);
+    }
+    bikeIdSet.add(id);
+
+    const validatedBike = validateBikeInput(entry);
+    const createdAt = cleanTimestamp(entry.createdAt ?? entry.created_at, fallbackNow);
+    const updatedAt = cleanTimestamp(entry.updatedAt ?? entry.updated_at, createdAt);
+
+    const rawSerials = entry.serials ?? [];
+    if (!Array.isArray(rawSerials)) {
+      throw new ValidationError('Seriennummern müssen als Liste übergeben werden.');
+    }
+    if (rawSerials.length > 50) {
+      throw new ValidationError('Maximal 50 zusätzliche Seriennummern pro Bike erlaubt.');
+    }
+
+    const serials = rawSerials.map((serialEntry) => {
+      assertObject(serialEntry);
+      const serialId = cleanRequiredId(serialEntry.id, 'Seriennummern-ID');
+      if (serialIdSet.has(serialId)) {
+        throw new ValidationError(`Doppelte Seriennummern-ID im Backup: ${serialId}`);
+      }
+      serialIdSet.add(serialId);
+      const validatedSerial = validateBikeSerialInput(serialEntry);
+      return {
+        id: serialId,
+        bikeId: id,
+        label: validatedSerial.label,
+        serialNumber: validatedSerial.serialNumber,
+        notes: validatedSerial.notes,
+        createdAt: cleanTimestamp(serialEntry.createdAt ?? serialEntry.created_at, createdAt),
+      };
+    });
+
+    return {
+      ...validatedBike,
+      id,
+      serials,
+      createdAt,
+      updatedAt,
+    };
+  });
+
+  const parts = raw.parts.map((entry) => {
+    assertObject(entry);
+    const id = cleanRequiredId(entry.id, 'Teile-ID');
+    if (partIdSet.has(id)) {
+      throw new ValidationError(`Doppelte Teile-ID im Backup: ${id}`);
+    }
+    partIdSet.add(id);
+
+    const validatedPart = validatePartInput(entry);
+    if (validatedPart.status === 'in_use') {
+      if (!validatedPart.bikeId || !bikeIdSet.has(validatedPart.bikeId)) {
+        throw new ValidationError(
+          `Teil „${validatedPart.name}“ verweist auf ein unbekanntes Fahrrad.`,
+        );
+      }
+    }
+
+    const createdAt = cleanTimestamp(entry.createdAt ?? entry.created_at, fallbackNow);
+    const updatedAt = cleanTimestamp(entry.updatedAt ?? entry.updated_at, createdAt);
+
+    return {
+      ...validatedPart,
+      id,
+      bikeId: validatedPart.status === 'in_use' ? validatedPart.bikeId : null,
+      createdAt,
+      updatedAt,
+    };
+  });
+
+  const orderItems = raw.orderItems.map((entry) => {
+    assertObject(entry);
+    const id = cleanRequiredId(entry.id, 'Bestell-ID');
+    if (orderIdSet.has(id)) {
+      throw new ValidationError(`Doppelte Bestell-ID im Backup: ${id}`);
+    }
+    orderIdSet.add(id);
+
+    const validatedOrder = validateOrderItemInput(entry);
+    const createdAt = cleanTimestamp(entry.createdAt ?? entry.created_at, fallbackNow);
+    const updatedAt = cleanTimestamp(entry.updatedAt ?? entry.updated_at, createdAt);
+
+    return {
+      ...validatedOrder,
+      id,
+      bikeId:
+        validatedOrder.bikeId && bikeIdSet.has(validatedOrder.bikeId)
+          ? validatedOrder.bikeId
+          : null,
+      partId:
+        validatedOrder.partId && partIdSet.has(validatedOrder.partId)
+          ? validatedOrder.partId
+          : null,
+      createdAt,
+      updatedAt,
+    };
+  });
+
+  return { bikes, parts, orderItems };
 }

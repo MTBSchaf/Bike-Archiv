@@ -572,5 +572,81 @@ export function createDatabase(dbPath) {
         };
       });
     },
+    replaceAllData(backup) {
+      return runInTransaction(() => {
+        db.exec('DELETE FROM order_items; DELETE FROM parts; DELETE FROM bike_serials; DELETE FROM bikes;');
+
+        for (const bike of backup.bikes) {
+          stmtInsertBike.run(
+            bike.id,
+            bike.name,
+            bike.brand,
+            bike.model,
+            bike.modelYear,
+            bike.category,
+            bike.frameSize,
+            bike.wheelSize,
+            bike.color,
+            bike.serialNumber,
+            bike.notes,
+            bike.createdAt,
+            bike.updatedAt,
+          );
+          for (const serial of bike.serials) {
+            stmtInsertSerial.run(
+              serial.id,
+              bike.id,
+              serial.label,
+              serial.serialNumber,
+              serial.notes,
+              serial.createdAt,
+            );
+          }
+        }
+
+        for (const part of backup.parts) {
+          stmtInsertPart.run(
+            part.id,
+            part.name,
+            part.brand,
+            part.category,
+            part.specs,
+            part.serialNumber,
+            part.status,
+            part.bikeId,
+            part.notes,
+            part.createdAt,
+            part.updatedAt,
+          );
+        }
+
+        for (const item of backup.orderItems) {
+          stmtInsertOrder.run(
+            item.id,
+            item.name,
+            item.brand,
+            item.category,
+            item.bikeId,
+            item.partId,
+            item.quantity,
+            item.priority,
+            item.estimatedPrice,
+            item.shopUrl,
+            item.status,
+            item.notes,
+            item.createdAt,
+            item.updatedAt,
+          );
+        }
+
+        stmtSetMeta.run('initial_seed_applied', '1');
+
+        return {
+          bikes: this.listBikes(),
+          parts: this.listParts(),
+          orderItems: this.listOrderItems(),
+        };
+      });
+    },
   };
 }

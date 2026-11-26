@@ -267,3 +267,118 @@ test('Security-Checks: CSRF-Header, Shop-URL-Validierung und Security-Header', a
     await ctx.close();
   }
 });
+
+test('Backup-Import über POST /api/import ersetzt Bestand konsistent und validiert Eingaben', async () => {
+  const ctx = await startTestServer();
+  try {
+    // Fehlender CSRF-Header -> 403
+    const noCsrf = await apiFetch(ctx.baseUrl, '/api/import', {
+      method: 'POST',
+      includeCsrf: false,
+      body: { bikes: [], parts: [], orderItems: [] },
+    });
+    assert.equal(noCsrf.res.status, 403);
+
+    // Ungültige javascript:-URL -> 400
+    const badUrlImport = await apiFetch(ctx.baseUrl, '/api/import', {
+      method: 'POST',
+      body: {
+        bikes: [],
+        parts: [],
+        orderItems: [
+          {
+            id: 'order-bad',
+            name: 'Bremsbeläge',
+            category: 'Bremsen',
+            quantity: 1,
+            priority: 'normal',
+            status: 'open',
+            shopUrl: 'javascript:alert(1)',
+          },
+        ],
+      },
+    });
+    assert.equal(badUrlImport.res.status, 400);
+
+    // in_use ohne existierendes Bike -> 400
+    const badRefImport = await apiFetch(ctx.baseUrl, '/api/import', {
+      method: 'POST',
+      body: {
+        bikes: [],
+        parts: [
+          {
+            id: 'part-orphan',
+            name: 'Vorbau',
+            category: 'Cockpit & Sattel',
+            status: 'in_use',
+            bikeId: 'non-existent-bike',
+          },
+        ],
+        orderItems: [],
+      },
+    });
+    assert.equal(badRefImport.res.status, 400);
+
+    // Gültiger Import ersetzt Bestand vollständig
+    const validImport = await apiFetch(ctx.baseUrl, '/api/import', {
+      method: 'POST',
+      body: {
+        bikes: [
+          {
+            id: 'bike-import-1',
+            brand: 'Santa Cruz',
+            model: 'Hightower',
+            modelYear: 2024,
+            category: 'Trail',
+            serialNumber: 'SC-HT-1234',
+            serials: [
+              {
+                id: 'ser-import-1',
+                label: 'Gabel',
+                serialNumber: 'RS-LYRIK-77',
+                notes: '',
+              },
+            ],
+          },
+        ],
+        parts: [
+          {
+            id: 'part-import-1',
+            name: 'RockShox Lyrik Ultimate',
+            brand: 'RockShox',
+            category: 'Fahrwerk',
+            status: 'in_use',
+            bikeId: 'bike-import-1',
+          },
+        ],
+        orderItems: [
+          {
+            id: 'order-import-1',
+            name: 'Dichtkit',
+            category: 'Fahrwerk',
+            bikeId: 'bike-import-1',
+            partId: 'part-import-1',
+            quantity: 1,
+            priority: 'high',
+            status: 'open',
+            shopUrl: 'https://example.com/kit',
+          },
+        ],
+      },
+    });
+    assert.equal(validImport.res.status, 200);
+    assert.equal(validImport.data.bikes.length, 1);
+    assert.equal(validImport.data.bikes[0].id, 'bike-import-1');
+    assert.equal(validImport.data.bikes[0].partCount, 1);
+    assert.equal(validImport.data.bikes[0].serials.length, 1);
+    assert.equal(validImport.data.parts.length, 1);
+    assert.equal(validImport.data.parts[0].bikeName, 'Santa Cruz Hightower');
+    assert.equal(validImport.data.orderItems.length, 1);
+
+    const bootstrap = await apiFetch(ctx.baseUrl, '/api/bootstrap');
+    assert.equal(bootstrap.data.bikes.length, 1);
+    assert.equal(bootstrap.data.bikes[0].id, 'bike-import-1');
+  } finally {
+    await ctx.close();
+  }
+});

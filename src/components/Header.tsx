@@ -1,4 +1,4 @@
-import { Bike as BikeIcon, Plus, ShoppingCart, Wrench } from 'lucide-react';
+import { Bike as BikeIcon, Download, Plus, ShoppingCart, Wrench } from 'lucide-react';
 import type { TabKey } from '../types';
 
 interface HeaderProps {
@@ -10,6 +10,7 @@ interface HeaderProps {
     openOrders: number;
   };
   onPrimaryAction: () => void;
+  onOpenBackup: () => void;
 }
 
 const PRIMARY_LABELS: Record<TabKey, string> = {
@@ -23,6 +24,7 @@ export function Header({
   onSelectTab,
   counts,
   onPrimaryAction,
+  onOpenBackup,
 }: HeaderProps) {
   return (
     <header className="app-header">
@@ -70,10 +72,17 @@ export function Header({
           </button>
         </nav>
 
-        <button type="button" className="btn btn-primary" onClick={onPrimaryAction}>
-          <Plus size={16} />
-          <span>{PRIMARY_LABELS[activeTab]}</span>
-        </button>
+        <div className="header-actions">
+          <button type="button" className="btn btn-secondary" onClick={onOpenBackup}>
+            <Download size={15} />
+            <span>Backup</span>
+          </button>
+
+          <button type="button" className="btn btn-primary" onClick={onPrimaryAction}>
+            <Plus size={16} />
+            <span>{PRIMARY_LABELS[activeTab]}</span>
+          </button>
+        </div>
       </div>
     </header>
   );

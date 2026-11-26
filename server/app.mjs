@@ -3,6 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import {
   ValidationError,
+  validateBackupPayload,
   validateBikeInput,
   validateBikeSerialInput,
   validateOrderItemInput,
@@ -10,6 +11,7 @@ import {
 } from './validation.mjs';
 
 const MAX_BODY_BYTES = 256 * 1024;
+const MAX_IMPORT_BODY_BYTES = 2 * 1024 * 1024;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -45,7 +47,7 @@ function sendJson(res, statusCode, payload) {
   res.end(body);
 }
 
-async function readJsonBody(req) {
+async function readJsonBody(req, maxBytes = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let totalBytes = 0;
@@ -54,7 +56,7 @@ async function readJsonBody(req) {
     req.on('data', (chunk) => {
       if (settled) return;
       totalBytes += chunk.length;
-      if (totalBytes > MAX_BODY_BYTES) {
+      if (totalBytes > maxBytes) {
         settled = true;
         const err = new ValidationError('Anfrageinhalt ist zu groß.');
         err.statusCode = 413;
@@ -170,6 +172,14 @@ export function createAppServer({ db, distDir = null, serveStatic = false }) {
             parts: db.listParts(),
             orderItems: db.listOrderItems(),
           });
+          return;
+        }
+
+        if (pathname === '/api/import' && method === 'POST') {
+          const body = await readJsonBody(req, MAX_IMPORT_BODY_BYTES);
+          const validated = validateBackupPayload(body);
+          const payload = db.replaceAllData(validated);
+          sendJson(res, 200, payload);
           return;
         }
 

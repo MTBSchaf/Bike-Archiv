@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api } from './api';
+import { api, type StorageMode } from './api';
 import { AssignPartModal } from './components/AssignPartModal';
+import { BackupModal } from './components/BackupModal';
 import { BikeDetailView } from './components/BikeDetailView';
 import { BikeModal } from './components/BikeModal';
 import { BikesView } from './components/BikesView';
@@ -30,6 +31,8 @@ export default function App() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [storageMode, setStorageMode] = useState<StorageMode>('local');
+  const [backupModalOpen, setBackupModalOpen] = useState(false);
 
   const [bikeModalState, setBikeModalState] = useState<{
     open: boolean;
@@ -82,6 +85,7 @@ export default function App() {
       setBikes(data.bikes);
       setParts(data.parts);
       setOrderItems(data.orderItems);
+      setStorageMode(api.getStorageMode());
       setLoadError('');
     } catch (err) {
       setLoadError(
@@ -327,6 +331,19 @@ export default function App() {
     }
   }
 
+  async function handleImportBackup(payload: unknown) {
+    const data = await api.importBackup(payload);
+    setBikes(data.bikes);
+    setParts(data.parts);
+    setOrderItems(data.orderItems);
+    setStorageMode(api.getStorageMode());
+    if (selectedBikeId && !data.bikes.some((b) => b.id === selectedBikeId)) {
+      setSelectedBikeId(null);
+    }
+    setBackupModalOpen(false);
+    showToast('Backup importiert');
+  }
+
   return (
     <div className="app-shell">
       <Header
@@ -338,6 +355,7 @@ export default function App() {
           openOrders: openOrdersCount,
         }}
         onPrimaryAction={handlePrimaryAction}
+        onOpenBackup={() => setBackupModalOpen(true)}
       />
 
       <main className="main-content">
@@ -471,6 +489,18 @@ export default function App() {
           onConfirm={handleConfirmDelete}
           onCancel={() => setConfirmDelete(null)}
           busy={deleteBusy}
+        />
+      )}
+
+      {backupModalOpen && (
+        <BackupModal
+          bikes={bikes}
+          parts={parts}
+          orderItems={orderItems}
+          storageMode={storageMode}
+          onImport={handleImportBackup}
+          onExportSuccess={() => showToast('Backup heruntergeladen')}
+          onClose={() => setBackupModalOpen(false)}
         />
       )}
 
