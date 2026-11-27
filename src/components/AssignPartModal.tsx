@@ -7,6 +7,7 @@ import {
   type PartCategory,
   type PartFormInput,
 } from '../types';
+import { ImageField } from './ImageField';
 
 interface AssignPartModalProps {
   bike: Bike;
@@ -30,7 +31,11 @@ export function AssignPartModal({
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [category, setCategory] = useState<PartCategory>('Antrieb');
+  const [partNumber, setPartNumber] = useState('');
+  const [quantity, setQuantity] = useState('1');
   const [specs, setSpecs] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [manufacturerUrl, setManufacturerUrl] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -59,11 +64,23 @@ export function AssignPartModal({
           setBusy(false);
           return;
         }
+        const parsedQty = Number(quantity);
+        if (!Number.isInteger(parsedQty) || parsedQty < 1 || parsedQty > 999) {
+          setError('Menge muss eine ganze Zahl zwischen 1 und 999 sein.');
+          setBusy(false);
+          return;
+        }
         await onCreateForBike({
           name: name.trim(),
           brand: brand.trim(),
           category,
+          subCategory: '',
+          partNumber: partNumber.trim(),
+          quantity: parsedQty,
           specs: specs.trim(),
+          structuredSpecs: [],
+          manufacturerUrl: manufacturerUrl.trim(),
+          imageUrl: imageUrl.trim(),
           serialNumber: serialNumber.trim(),
           status: 'in_use',
           bikeId: bike.id,
@@ -138,6 +155,12 @@ export function AssignPartModal({
             </div>
           ) : (
             <div className="form-grid">
+              <ImageField
+                label="Produktbild"
+                value={imageUrl}
+                onChange={setImageUrl}
+              />
+
               <div className="form-field full">
                 <label className="form-label" htmlFor="assign-part-name">
                   Bezeichnung *
@@ -182,6 +205,33 @@ export function AssignPartModal({
                 </select>
               </div>
 
+              <div className="form-field">
+                <label className="form-label" htmlFor="assign-part-number">
+                  Teilenummer (optional)
+                </label>
+                <input
+                  id="assign-part-number"
+                  className="input mono"
+                  value={partNumber}
+                  onChange={(e) => setPartNumber(e.target.value)}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label" htmlFor="assign-part-qty">
+                  Stückzahl
+                </label>
+                <input
+                  id="assign-part-qty"
+                  type="number"
+                  min={1}
+                  max={999}
+                  className="input"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                />
+              </div>
+
               <div className="form-field full">
                 <label className="form-label" htmlFor="assign-part-specs">
                   Spezifikation
@@ -191,6 +241,19 @@ export function AssignPartModal({
                   className="input"
                   value={specs}
                   onChange={(e) => setSpecs(e.target.value)}
+                />
+              </div>
+
+              <div className="form-field full">
+                <label className="form-label" htmlFor="assign-part-url">
+                  Herstellerseite (optional)
+                </label>
+                <input
+                  id="assign-part-url"
+                  type="url"
+                  className="input"
+                  value={manufacturerUrl}
+                  onChange={(e) => setManufacturerUrl(e.target.value)}
                 />
               </div>
 

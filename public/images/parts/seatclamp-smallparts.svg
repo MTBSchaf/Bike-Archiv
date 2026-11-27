@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img">
+  <defs>
+    <radialGradient id="studioBg" cx="50%" cy="42%" r="68%">
+      <stop offset="0%" stop-color="#f8f9fb"/>
+      <stop offset="100%" stop-color="#e9edf3"/>
+    </radialGradient>
+    <radialGradient id="floorShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(15,23,42,0.22)"/>
+      <stop offset="70%" stop-color="rgba(15,23,42,0.06)"/>
+      <stop offset="100%" stop-color="rgba(15,23,42,0)"/>
+    </radialGradient>
+    <linearGradient id="umber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9b8878"/>
+      <stop offset="45%" stop-color="#7c6b5d"/>
+      <stop offset="100%" stop-color="#584b40"/>
+    </linearGradient>
+    <linearGradient id="umberDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#6b5c50"/>
+      <stop offset="100%" stop-color="#483d34"/>
+    </linearGradient>
+    <linearGradient id="alloyDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3c424d"/>
+      <stop offset="50%" stop-color="#22262d"/>
+      <stop offset="100%" stop-color="#121519"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#eef2f6"/>
+      <stop offset="45%" stop-color="#b6c0cc"/>
+      <stop offset="100%" stop-color="#7c8796"/>
+    </linearGradient>
+    <linearGradient id="foxBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2589ff"/>
+      <stop offset="100%" stop-color="#0b57d0"/>
+    </linearGradient>
+    
+  </defs>
+  <rect width="640" height="480" fill="url(#studioBg)"/>
+  
+  <ellipse cx="320" cy="395" rx="205" ry="15" fill="url(#floorShadow)"/>
+  <!-- Seat clamp 38.6mm -->
+  <circle cx="185" cy="185" r="54" fill="none" stroke="url(#alloyDark)" stroke-width="22"/>
+  <rect x="228" y="168" width="30" height="34" rx="6" fill="#2d333d"/>
+  <!-- Chainstay protector -->
+  <path d="M 300 155 L 525 145 Q 540 165 525 190 L 300 185 Z" fill="#1c2026" stroke="#3c424d" stroke-width="2"/>
+  <!-- Grommets & bolts -->
+  <rect x="130" y="305" width="38" height="24" rx="10" fill="#22262e"/>
+  <rect x="185" y="305" width="38" height="24" rx="10" fill="#22262e"/>
+  <g transform="translate(275 317)"><rect x="-10" y="-12" width="20" height="24" rx="4" fill="url(#steel)" stroke="#5b6472" stroke-width="1.5"/><circle cx="0" cy="0" r="4" fill="#22262e"/></g><g transform="translate(333 317)"><rect x="-10" y="-12" width="20" height="24" rx="4" fill="url(#steel)" stroke="#5b6472" stroke-width="1.5"/><circle cx="0" cy="0" r="4" fill="#22262e"/></g><g transform="translate(391 317)"><rect x="-10" y="-12" width="20" height="24" rx="4" fill="url(#steel)" stroke="#5b6472" stroke-width="1.5"/><circle cx="0" cy="0" r="4" fill="#22262e"/></g><g transform="translate(449 317)"><rect x="-10" y="-12" width="20" height="24" rx="4" fill="url(#steel)" stroke="#5b6472" stroke-width="1.5"/><circle cx="0" cy="0" r="4" fill="#22262e"/></g><g transform="translate(507 317)"><rect x="-10" y="-12" width="20" height="24" rx="4" fill="url(#steel)" stroke="#5b6472" stroke-width="1.5"/><circle cx="0" cy="0" r="4" fill="#22262e"/></g>
+
+</svg>

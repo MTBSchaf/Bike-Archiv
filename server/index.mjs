@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAppServer } from './app.mjs';
 import { createDatabase } from './db.mjs';
-import { seedInitialData } from './seed.mjs';
+import { applyCatalogUpdates, seedInitialData } from './seed.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -15,6 +15,8 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 }
 const host = process.env.HOST || '127.0.0.1';
 const dbPath = process.env.DB_PATH || path.join(rootDir, 'data', 'bike-archiv.sqlite');
+const uploadsDir =
+  process.env.UPLOADS_DIR || path.join(path.dirname(dbPath), 'uploads');
 const distDir = path.join(rootDir, 'dist');
 const distIndexPath = path.join(distDir, 'index.html');
 const serveStatic =
@@ -26,8 +28,9 @@ const serveStatic =
 
 const db = createDatabase(dbPath);
 seedInitialData(db);
+applyCatalogUpdates(db);
 
-const server = createAppServer({ db, distDir, serveStatic });
+const server = createAppServer({ db, distDir, serveStatic, uploadsDir, rootDir });
 
 server.listen(port, host, () => {
   console.log(`Bike Archiv Server läuft auf http://${host}:${port}`);

@@ -801,8 +801,8 @@ if ! id -u bike-archiv >/dev/null 2>&1; then
   useradd --system --home-dir /opt/bike-archiv --shell /usr/sbin/nologin bike-archiv
 fi
 
-mkdir -p /var/lib/bike-archiv /etc/bike-archiv
-chown bike-archiv:bike-archiv /var/lib/bike-archiv
+mkdir -p /var/lib/bike-archiv /var/lib/bike-archiv/uploads /var/lib/bike-archiv/backups /etc/bike-archiv
+chown -R bike-archiv:bike-archiv /var/lib/bike-archiv
 chmod 750 /var/lib/bike-archiv
 
 cat > /etc/bike-archiv/bike-archiv.env <<EOF
@@ -810,6 +810,7 @@ NODE_ENV=production
 HOST=0.0.0.0
 PORT=${APP_PORT}
 DB_PATH=/var/lib/bike-archiv/bike-archiv.sqlite
+UPLOADS_DIR=/var/lib/bike-archiv/uploads
 SERVE_STATIC=true
 EOF
 chown root:bike-archiv /etc/bike-archiv/bike-archiv.env
@@ -858,6 +859,9 @@ cat > /usr/local/bin/bike-archiv-update <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 cd /opt/bike-archiv
+if [ -x /opt/bike-archiv/deploy/proxmox/update.sh ]; then
+  exec /opt/bike-archiv/deploy/proxmox/update.sh "$@"
+fi
 git pull --ff-only
 npm ci
 npm run build

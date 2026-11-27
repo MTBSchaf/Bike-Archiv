@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img">
+  <defs>
+    <radialGradient id="studioBg" cx="50%" cy="42%" r="68%">
+      <stop offset="0%" stop-color="#f8f9fb"/>
+      <stop offset="100%" stop-color="#e9edf3"/>
+    </radialGradient>
+    <radialGradient id="floorShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(15,23,42,0.22)"/>
+      <stop offset="70%" stop-color="rgba(15,23,42,0.06)"/>
+      <stop offset="100%" stop-color="rgba(15,23,42,0)"/>
+    </radialGradient>
+    <linearGradient id="umber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9b8878"/>
+      <stop offset="45%" stop-color="#7c6b5d"/>
+      <stop offset="100%" stop-color="#584b40"/>
+    </linearGradient>
+    <linearGradient id="umberDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#6b5c50"/>
+      <stop offset="100%" stop-color="#483d34"/>
+    </linearGradient>
+    <linearGradient id="alloyDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3c424d"/>
+      <stop offset="50%" stop-color="#22262d"/>
+      <stop offset="100%" stop-color="#121519"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#eef2f6"/>
+      <stop offset="45%" stop-color="#b6c0cc"/>
+      <stop offset="100%" stop-color="#7c8796"/>
+    </linearGradient>
+    <linearGradient id="foxBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2589ff"/>
+      <stop offset="100%" stop-color="#0b57d0"/>
+    </linearGradient>
+    
+  </defs>
+  <rect width="640" height="480" fill="url(#studioBg)"/>
+  
+  <ellipse cx="320" cy="395" rx="205" ry="15" fill="url(#floorShadow)"/>
+  <circle cx="195" cy="175" r="58" fill="url(#steel)" stroke="#535c69" stroke-width="3"/>
+  <circle cx="195" cy="175" r="44" fill="#1c2026"/>
+  <circle cx="195" cy="175" r="32" fill="#e9edf3"/>
+  <circle cx="345" cy="175" r="46" fill="url(#steel)" stroke="#535c69" stroke-width="3"/>
+  <circle cx="345" cy="175" r="34" fill="#1c2026"/>
+  <circle cx="345" cy="175" r="24" fill="#e9edf3"/>
+  <!-- Spacers & Top cap -->
+  <rect x="435" y="135" width="68" height="24" rx="5" fill="url(#alloyDark)"/>
+  <rect x="435" y="168" width="68" height="24" rx="5" fill="url(#alloyDark)"/>
+  <rect x="435" y="201" width="68" height="16" rx="4" fill="#2d333d"/>
+  <!-- Cable housing -->
+  <circle cx="320" cy="312" r="56" fill="none" stroke="#181b20" stroke-width="12"/>
+  <circle cx="320" cy="312" r="42" fill="none" stroke="#2f3540" stroke-width="8"/>
+
+</svg>

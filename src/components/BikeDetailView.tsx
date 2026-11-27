@@ -1,7 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import {
   ArrowLeft,
+  Bike as BikeIcon,
+  ChevronDown,
+  ChevronUp,
   Copy,
+  ExternalLink,
   Pencil,
   Plus,
   Search,
@@ -44,26 +48,47 @@ export function BikeDetailView({
   onCopySerial,
 }: BikeDetailViewProps) {
   const [partQuery, setPartQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [expandedPartIds, setExpandedPartIds] = useState<Record<string, boolean>>({});
   const [serialLabel, setSerialLabel] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [serialNotes, setSerialNotes] = useState('');
   const [serialBusy, setSerialBusy] = useState(false);
   const [serialError, setSerialError] = useState('');
 
+  const installedParts = useMemo(
+    () => parts.filter((part) => part.status === 'in_use' && part.bikeId === bike.id),
+    [parts, bike.id],
+  );
+
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const part of installedParts) {
+      counts.set(part.category, (counts.get(part.category) ?? 0) + 1);
+    }
+    return counts;
+  }, [installedParts]);
+
   const bikeParts = useMemo(() => {
     const q = partQuery.trim().toLowerCase();
-    return parts.filter((part) => {
-      if (part.status !== 'in_use' || part.bikeId !== bike.id) return false;
+    return installedParts.filter((part) => {
+      if (categoryFilter !== 'all' && part.category !== categoryFilter) return false;
       if (!q) return true;
       return (
         part.name.toLowerCase().includes(q) ||
         part.brand.toLowerCase().includes(q) ||
         part.category.toLowerCase().includes(q) ||
+        part.subCategory.toLowerCase().includes(q) ||
+        part.partNumber.toLowerCase().includes(q) ||
         part.specs.toLowerCase().includes(q) ||
-        part.serialNumber.toLowerCase().includes(q)
+        part.serialNumber.toLowerCase().includes(q) ||
+        part.structuredSpecs.some(
+          (s) =>
+            s.label.toLowerCase().includes(q) || s.value.toLowerCase().includes(q),
+        )
       );
     });
-  }, [parts, bike.id, partQuery]);
+  }, [installedParts, categoryFilter, partQuery]);
 
   const groupedParts = useMemo(() => {
     const map = new Map<string, Part[]>();
@@ -81,10 +106,12 @@ export function BikeDetailView({
     })).filter((group) => group.items.length > 0);
   }, [bikeParts]);
 
-  const totalInstalledCount = useMemo(
-    () => parts.filter((p) => p.status === 'in_use' && p.bikeId === bike.id).length,
-    [parts, bike.id],
-  );
+  function toggleExpanded(partId: string) {
+    setExpandedPartIds((prev) => ({
+      ...prev,
+      [partId]: !prev[partId],
+    }));
+  }
 
   async function handleSerialSubmit(e: FormEvent) {
     e.preventDefault();
@@ -118,65 +145,90 @@ export function BikeDetailView({
       </button>
 
       <div className="card detail-hero">
-        <div className="detail-hero-top">
+        <div className="detail-hero-layout">
+          <div className="detail-hero-media">
+            {bike.imageUrl ? (
+              <img src={bike.imageUrl} alt={bike.name} />
+            ) : (
+              <div className="media-placeholder">
+                <BikeIcon size={44} />
+              </div>
+            )}
+          </div>
+
           <div>
-            <div className="bike-card-brand">{bike.brand}</div>
-            <h1 className="page-title" style={{ marginTop: 2 }}>
-              {bike.name}
-            </h1>
-          </div>
-          <div className="row-actions" style={{ gap: 8 }}>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => onEditBike(bike)}
-            >
-              <Pencil size={14} />
-              <span>Bearbeiten</span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-danger-outline btn-sm"
-              onClick={() => onDeleteBike(bike)}
-            >
-              <Trash2 size={14} />
-              <span>Löschen</span>
-            </button>
+            <div className="detail-hero-top">
+              <div>
+                <div className="bike-card-brand">{bike.brand}</div>
+                <h1 className="page-title" style={{ marginTop: 2 }}>
+                  {bike.name}
+                </h1>
+              </div>
+              <div className="row-actions" style={{ gap: 8, flexWrap: 'wrap' }}>
+                {bike.manufacturerUrl && (
+                  <a
+                    href={bike.manufacturerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary btn-sm"
+                  >
+                    <ExternalLink size={14} />
+                    <span>Herstellerseite</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => onEditBike(bike)}
+                >
+                  <Pencil size={14} />
+                  <span>Bearbeiten</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger-outline btn-sm"
+                  onClick={() => onDeleteBike(bike)}
+                >
+                  <Trash2 size={14} />
+                  <span>Löschen</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="detail-meta-grid">
+              <div className="detail-meta-item">
+                <label>Modell</label>
+                <span>{bike.model}</span>
+              </div>
+              <div className="detail-meta-item">
+                <label>Jahrgang</label>
+                <span>{bike.modelYear || '–'}</span>
+              </div>
+              <div className="detail-meta-item">
+                <label>Kategorie</label>
+                <span>{bike.category || '–'}</span>
+              </div>
+              <div className="detail-meta-item">
+                <label>Rahmengröße</label>
+                <span>{bike.frameSize || '–'}</span>
+              </div>
+              <div className="detail-meta-item">
+                <label>Laufräder</label>
+                <span>{bike.wheelSize || '–'}</span>
+              </div>
+              <div className="detail-meta-item">
+                <label>Farbe</label>
+                <span>{bike.color || '–'}</span>
+              </div>
+            </div>
+
+            {bike.notes && (
+              <p style={{ margin: '14px 0 0', color: 'var(--text-secondary)', fontSize: 13.5 }}>
+                {bike.notes}
+              </p>
+            )}
           </div>
         </div>
-
-        <div className="detail-meta-grid">
-          <div className="detail-meta-item">
-            <label>Modell</label>
-            <span>{bike.model}</span>
-          </div>
-          <div className="detail-meta-item">
-            <label>Jahrgang</label>
-            <span>{bike.modelYear || '–'}</span>
-          </div>
-          <div className="detail-meta-item">
-            <label>Kategorie</label>
-            <span>{bike.category || '–'}</span>
-          </div>
-          <div className="detail-meta-item">
-            <label>Rahmengröße</label>
-            <span>{bike.frameSize || '–'}</span>
-          </div>
-          <div className="detail-meta-item">
-            <label>Laufräder</label>
-            <span>{bike.wheelSize || '–'}</span>
-          </div>
-          <div className="detail-meta-item">
-            <label>Farbe</label>
-            <span>{bike.color || '–'}</span>
-          </div>
-        </div>
-
-        {bike.notes && (
-          <p style={{ margin: '14px 0 0', color: 'var(--text-secondary)', fontSize: 13.5 }}>
-            {bike.notes}
-          </p>
-        )}
       </div>
 
       <div className="card section-card">
@@ -288,7 +340,7 @@ export function BikeDetailView({
       <div className="card section-card">
         <div className="section-header">
           <h2 className="section-title">
-            Verbaute Teile ({totalInstalledCount})
+            Verbaute Teile ({installedParts.length})
           </h2>
 
           <div className="toolbar-controls">
@@ -297,7 +349,7 @@ export function BikeDetailView({
               <input
                 type="search"
                 className="search-input"
-                placeholder="Teile durchsuchen..."
+                placeholder="Teil, Teilenummer oder Wert suchen..."
                 value={partQuery}
                 onChange={(e) => setPartQuery(e.target.value)}
               />
@@ -313,11 +365,37 @@ export function BikeDetailView({
           </div>
         </div>
 
+        {installedParts.length > 0 && (
+          <div className="filter-chips" style={{ marginBottom: 16 }}>
+            <button
+              type="button"
+              className={`filter-chip ${categoryFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setCategoryFilter('all')}
+            >
+              <span>Alle</span>
+              <span className="filter-chip-count">{installedParts.length}</span>
+            </button>
+            {PART_CATEGORIES.filter((cat) => (categoryCounts.get(cat) ?? 0) > 0).map(
+              (cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  className={`filter-chip ${categoryFilter === cat ? 'active' : ''}`}
+                  onClick={() => setCategoryFilter(cat)}
+                >
+                  <span>{cat}</span>
+                  <span className="filter-chip-count">{categoryCounts.get(cat)}</span>
+                </button>
+              ),
+            )}
+          </div>
+        )}
+
         {groupedParts.length === 0 ? (
           <div className="empty-state">
             <Wrench size={24} />
             <p>
-              {totalInstalledCount === 0
+              {installedParts.length === 0
                 ? 'Diesem Bike sind noch keine Teile zugeordnet.'
                 : 'Keine passenden Teile gefunden.'}
             </p>
@@ -325,68 +403,163 @@ export function BikeDetailView({
         ) : (
           groupedParts.map((group) => (
             <div key={group.category} className="parts-group">
-              <h3 className="parts-group-title">{group.category}</h3>
+              <h3 className="parts-group-title">
+                {group.category} ({group.items.length})
+              </h3>
               <div className="parts-group-list">
-                {group.items.map((part) => (
-                  <div key={part.id} className="part-row">
-                    <div style={{ minWidth: 0 }}>
-                      <div className="item-title">
-                        {part.name}
-                        {part.brand ? (
-                          <span
-                            style={{
-                              fontWeight: 450,
-                              color: 'var(--text-secondary)',
-                              marginLeft: 8,
-                              fontSize: 12.5,
-                            }}
+                {group.items.map((part) => {
+                  const isExpanded = Boolean(expandedPartIds[part.id]);
+                  const hasDetails =
+                    part.structuredSpecs.length > 0 ||
+                    Boolean(part.manufacturerUrl) ||
+                    Boolean(part.notes);
+
+                  return (
+                    <div key={part.id} className="part-row-wrap">
+                      <div className="part-row">
+                        <div className="part-row-main">
+                          <div className="part-thumb">
+                            {part.imageUrl ? (
+                              <img src={part.imageUrl} alt={part.name} loading="lazy" />
+                            ) : (
+                              <Wrench size={16} />
+                            )}
+                          </div>
+
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div className="item-title">
+                              <span>{part.name}</span>
+                              {part.brand && (
+                                <span
+                                  style={{
+                                    fontWeight: 450,
+                                    color: 'var(--text-secondary)',
+                                    fontSize: 12.5,
+                                  }}
+                                >
+                                  {part.brand}
+                                </span>
+                              )}
+                              {part.quantity > 1 && (
+                                <span className="qty-pill">{part.quantity}×</span>
+                              )}
+                              {part.partNumber && (
+                                <span className="part-number-tag">{part.partNumber}</span>
+                              )}
+                            </div>
+
+                            {part.specs && <div className="item-sub">{part.specs}</div>}
+                            {part.serialNumber && (
+                              <div className="item-sub mono">SN: {part.serialNumber}</div>
+                            )}
+
+                            {part.structuredSpecs.length > 0 && !isExpanded && (
+                              <div className="spec-chip-row">
+                                {part.structuredSpecs.slice(0, 3).map((spec, idx) => (
+                                  <span key={idx} className="spec-chip">
+                                    <span>{spec.label}:</span>
+                                    <strong>{spec.value}</strong>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="row-actions" style={{ flexWrap: 'wrap' }}>
+                          {hasDetails && (
+                            <button
+                              type="button"
+                              className="btn btn-subtle btn-sm"
+                              onClick={() => toggleExpanded(part.id)}
+                              aria-expanded={isExpanded}
+                            >
+                              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                              <span>Details</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-subtle btn-sm"
+                            onClick={() => onMovePartStatus(part, 'in_stock')}
                           >
-                            {part.brand}
-                          </span>
-                        ) : null}
+                            Ins Lager
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-subtle btn-sm"
+                            onClick={() => onMovePartStatus(part, 'defective')}
+                          >
+                            Defekt
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            title="Auf Bestellliste setzen"
+                            aria-label="Auf Bestellliste setzen"
+                            onClick={() => onOrderPart(part)}
+                          >
+                            <ShoppingCart size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            title="Teil bearbeiten"
+                            aria-label="Teil bearbeiten"
+                            onClick={() => onEditPart(part)}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        </div>
                       </div>
-                      {part.specs && <div className="item-sub">{part.specs}</div>}
-                      {part.serialNumber && (
-                        <div className="item-sub mono">SN: {part.serialNumber}</div>
+
+                      {isExpanded && hasDetails && (
+                        <div className="part-expanded-panel">
+                          <div className="part-thumb lg">
+                            {part.imageUrl ? (
+                              <img src={part.imageUrl} alt={part.name} />
+                            ) : (
+                              <Wrench size={24} />
+                            )}
+                          </div>
+
+                          <div>
+                            {part.structuredSpecs.length > 0 && (
+                              <div className="structured-specs-grid">
+                                {part.structuredSpecs.map((spec, idx) => (
+                                  <div key={idx} className="structured-spec-cell">
+                                    <span className="structured-spec-label">{spec.label}</span>
+                                    <span className="structured-spec-value">{spec.value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {part.notes && (
+                              <div className="item-sub" style={{ marginTop: 10 }}>
+                                Notiz: {part.notes}
+                              </div>
+                            )}
+
+                            {part.manufacturerUrl && (
+                              <div style={{ marginTop: 10 }}>
+                                <a
+                                  href={part.manufacturerUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-secondary btn-sm"
+                                >
+                                  <ExternalLink size={13} />
+                                  <span>Herstellerseite</span>
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
-
-                    <div className="row-actions" style={{ flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        className="btn btn-subtle btn-sm"
-                        onClick={() => onMovePartStatus(part, 'in_stock')}
-                      >
-                        Ins Lager
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-subtle btn-sm"
-                        onClick={() => onMovePartStatus(part, 'defective')}
-                      >
-                        Defekt
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        title="Auf Bestellliste setzen"
-                        aria-label="Auf Bestellliste setzen"
-                        onClick={() => onOrderPart(part)}
-                      >
-                        <ShoppingCart size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        title="Teil bearbeiten"
-                        aria-label="Teil bearbeiten"
-                        onClick={() => onEditPart(part)}
-                      >
-                        <Pencil size={15} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))

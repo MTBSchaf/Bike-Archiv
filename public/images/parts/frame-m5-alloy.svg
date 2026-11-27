@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img">
+  <defs>
+    <radialGradient id="studioBg" cx="50%" cy="42%" r="68%">
+      <stop offset="0%" stop-color="#f8f9fb"/>
+      <stop offset="100%" stop-color="#e9edf3"/>
+    </radialGradient>
+    <radialGradient id="floorShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(15,23,42,0.22)"/>
+      <stop offset="70%" stop-color="rgba(15,23,42,0.06)"/>
+      <stop offset="100%" stop-color="rgba(15,23,42,0)"/>
+    </radialGradient>
+    <linearGradient id="umber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9b8878"/>
+      <stop offset="45%" stop-color="#7c6b5d"/>
+      <stop offset="100%" stop-color="#584b40"/>
+    </linearGradient>
+    <linearGradient id="umberDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#6b5c50"/>
+      <stop offset="100%" stop-color="#483d34"/>
+    </linearGradient>
+    <linearGradient id="alloyDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3c424d"/>
+      <stop offset="50%" stop-color="#22262d"/>
+      <stop offset="100%" stop-color="#121519"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#eef2f6"/>
+      <stop offset="45%" stop-color="#b6c0cc"/>
+      <stop offset="100%" stop-color="#7c8796"/>
+    </linearGradient>
+    <linearGradient id="foxBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2589ff"/>
+      <stop offset="100%" stop-color="#0b57d0"/>
+    </linearGradient>
+    
+  </defs>
+  <rect width="640" height="480" fill="url(#studioBg)"/>
+  
+  <ellipse cx="320" cy="410" rx="210" ry="16" fill="url(#floorShadow)"/>
+  <path d="M 110 320 L 290 325 L 305 215 L 125 305 Z" fill="none" stroke="url(#umberDark)" stroke-width="18" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M 290 325 L 250 185 L 470 115 L 495 168 L 300 325 Z" fill="none" stroke="url(#umber)" stroke-width="26" stroke-linejoin="round" stroke-linecap="round"/>
+  <line x1="290" y1="325" x2="236" y2="128" stroke="url(#umber)" stroke-width="22" stroke-linecap="round"/>
+  <line x1="464" y1="98" x2="498" y2="178" stroke="url(#umber)" stroke-width="28" stroke-linecap="round"/>
+  <path d="M 252 204 L 308 198 L 294 232 Z" fill="url(#alloyDark)"/>
+  <circle cx="290" cy="325" r="14" fill="#20242b" stroke="#646d7a" stroke-width="3"/>
+  <circle cx="110" cy="320" r="8" fill="#1c2026" stroke="#7d8794" stroke-width="2"/>
+  <circle cx="252" cy="204" r="6" fill="#1c2026" stroke="#8b95a3" stroke-width="1.5"/>
+
+</svg>

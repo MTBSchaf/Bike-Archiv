@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { SCHEMA_VERSION } from './db.mjs';
+import { applyCatalogUpdates, CURRENT_CATALOG_VERSION } from './seed.mjs';
+import { checkRemoteUpdate, getAppVersion, getGitInfo } from './updater.mjs';
 import {
   ValidationError,
   validateBackupPayload,
@@ -8,10 +12,14 @@ import {
   validateBikeSerialInput,
   validateOrderItemInput,
   validatePartInput,
+  validateUpdatePackagePayload,
+  validateUploadPayload,
 } from './validation.mjs';
 
 const MAX_BODY_BYTES = 256 * 1024;
-const MAX_IMPORT_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_IMPORT_BODY_BYTES = 4 * 1024 * 1024;
+const MAX_UPLOAD_BODY_BYTES = 4.5 * 1024 * 1024;
+const UPLOAD_FILENAME_RE = /^\/uploads\/([a-f0-9-]{36}\.(jpg|png|webp))$/i;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -34,7 +42,7 @@ function setSecurityHeaders(res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'",
   );
 }
 
@@ -148,7 +156,66 @@ function serveStaticFile(distDir, reqPath, method, res) {
   fs.createReadStream(candidate).pipe(res);
 }
 
-export function createAppServer({ db, distDir = null, serveStatic = false }) {
+function serveUploadedFile(uploadsDir, reqPath, method, res) {
+  if (!uploadsDir) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Nicht gefunden.');
+    return;
+  }
+  const match = reqPath.match(UPLOAD_FILENAME_RE);
+  if (!match) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Nicht gefunden.');
+    return;
+  }
+  const fileName = match[1];
+  const resolvedRoot = path.resolve(uploadsDir);
+  const candidate = path.resolve(resolvedRoot, fileName);
+  if (!candidate.startsWith(resolvedRoot + path.sep) || !fs.existsSync(candidate)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Nicht gefunden.');
+    return;
+  }
+  const ext = path.extname(candidate).toLowerCase();
+  const mime = MIME_TYPES[ext] || 'application/octet-stream';
+  res.writeHead(200, {
+    'Content-Type': mime,
+    'Cache-Control': 'public, max-age=31536000, immutable',
+  });
+  if (method === 'HEAD') {
+    res.end();
+    return;
+  }
+  fs.createReadStream(candidate).pipe(res);
+}
+
+function buildSystemStatus(db, rootDir) {
+  const effectiveRoot = rootDir || process.cwd();
+  const catalogVersion = db.getMeta('catalog_version') || '1.0.0';
+  const schemaVersion = db.getMeta('schema_version') || SCHEMA_VERSION;
+  const git = getGitInfo(effectiveRoot);
+  return {
+    appVersion: getAppVersion(effectiveRoot),
+    schemaVersion,
+    catalogVersion,
+    latestCatalogVersion: CURRENT_CATALOG_VERSION,
+    catalogUpdatePending: catalogVersion !== CURRENT_CATALOG_VERSION,
+    git: {
+      available: git.available,
+      commit: git.commit || null,
+      branch: git.branch,
+    },
+    updateHistory: db.listUpdateHistory(),
+  };
+}
+
+export function createAppServer({
+  db,
+  distDir = null,
+  serveStatic = false,
+  uploadsDir = null,
+  rootDir = null,
+}) {
   return http.createServer(async (req, res) => {
     setSecurityHeaders(res);
 
@@ -156,6 +223,11 @@ export function createAppServer({ db, distDir = null, serveStatic = false }) {
       const method = req.method || 'GET';
       const url = new URL(req.url || '/', 'http://localhost');
       const pathname = url.pathname;
+
+      if (pathname.startsWith('/uploads/') && (method === 'GET' || method === 'HEAD')) {
+        serveUploadedFile(uploadsDir, pathname, method, res);
+        return;
+      }
 
       if (pathname.startsWith('/api/')) {
         if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
@@ -166,7 +238,67 @@ export function createAppServer({ db, distDir = null, serveStatic = false }) {
         }
 
         if (pathname === '/api/health' && method === 'GET') {
-          sendJson(res, 200, { ok: true });
+          sendJson(res, 200, {
+            ok: true,
+            appVersion: getAppVersion(rootDir || process.cwd()),
+            schemaVersion: db.getMeta('schema_version') || SCHEMA_VERSION,
+            catalogVersion: db.getMeta('catalog_version') || '1.0.0',
+          });
+          return;
+        }
+
+        if (pathname === '/api/system/status' && method === 'GET') {
+          sendJson(res, 200, buildSystemStatus(db, rootDir));
+          return;
+        }
+
+        if (pathname === '/api/system/check-update' && method === 'POST') {
+          const result = await checkRemoteUpdate({ rootDir: rootDir || process.cwd() });
+          sendJson(res, 200, result);
+          return;
+        }
+
+        if (pathname === '/api/system/apply-update' && method === 'POST') {
+          const body = await readJsonBody(req, MAX_IMPORT_BODY_BYTES);
+          const mode = body?.mode;
+          if (mode === 'catalog') {
+            const result = applyCatalogUpdates(db, { force: Boolean(body.force) });
+            sendJson(res, 200, {
+              mode: 'catalog',
+              result,
+              bikes: db.listBikes(),
+              parts: db.listParts(),
+              orderItems: db.listOrderItems(),
+              systemStatus: buildSystemStatus(db, rootDir),
+            });
+            return;
+          }
+          if (mode === 'package') {
+            const validated = validateUpdatePackagePayload(body.package ?? body);
+            const applied = db.applyIncrementalUpdate(validated);
+            sendJson(res, 200, {
+              mode: 'package',
+              result: applied.summary,
+              bikes: applied.bikes,
+              parts: applied.parts,
+              orderItems: applied.orderItems,
+              systemStatus: buildSystemStatus(db, rootDir),
+            });
+            return;
+          }
+          throw new ValidationError('Ungültiger Update-Modus. Erlaubt sind „catalog“ oder „package“.');
+        }
+
+        if (pathname === '/api/uploads' && method === 'POST') {
+          if (!uploadsDir) {
+            throw new ValidationError('Upload-Verzeichnis ist nicht konfiguriert.');
+          }
+          const body = await readJsonBody(req, MAX_UPLOAD_BODY_BYTES);
+          const { buffer, ext } = validateUploadPayload(body);
+          fs.mkdirSync(uploadsDir, { recursive: true });
+          const fileName = `${randomUUID()}.${ext}`;
+          fs.writeFileSync(path.join(uploadsDir, fileName), buffer);
+          sendJson(res, 201, { imageUrl: `/uploads/${fileName}` });
           return;
         }
 

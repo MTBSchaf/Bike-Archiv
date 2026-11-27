@@ -303,3 +303,94 @@ test('Proxmox-Installer unterstützt --dry-run und --yes ohne Container anzulege
     mock.cleanup();
   }
 });
+
+test('Proxmox-Updater (update.sh) besteht bash -n, --help, --dry-run und sichert SQLite vor Update', () => {
+  const updaterPath = path.join(repoRoot, 'deploy', 'proxmox', 'update.sh');
+  const syntax = spawnSync('bash', ['-n', updaterPath], { encoding: 'utf8' });
+  assert.equal(syntax.status, 0, syntax.stderr);
+
+  const help = spawnSync('bash', [updaterPath, '--help'], { encoding: 'utf8' });
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /--branch/);
+  assert.match(help.stdout, /--check/);
+  assert.match(help.stdout, /--dry-run/);
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bike-archiv-upd-'));
+  try {
+    const appDir = path.join(tmpDir, 'app');
+    const binDir = path.join(tmpDir, 'bin');
+    const dbFile = path.join(tmpDir, 'bike-archiv.sqlite');
+    fs.mkdirSync(path.join(appDir, '.git'), { recursive: true });
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(dbFile, 'SQLite mock content', 'utf8');
+
+    const logFile = path.join(tmpDir, 'upd.log');
+    const writeFake = (name, body) => {
+      fs.writeFileSync(path.join(binDir, name), `#!/usr/bin/env bash\n${body}`, {
+        mode: 0o755,
+      });
+    };
+
+    writeFake(
+      'git',
+      `
+echo "git $*" >> "${logFile}"
+if printf '%s' "$*" | grep -q 'rev-parse --abbrev-ref HEAD'; then
+  echo "main"
+elif printf '%s' "$*" | grep -q 'rev-parse origin/main'; then
+  echo "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+elif printf '%s' "$*" | grep -q 'rev-parse HEAD'; then
+  echo "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+fi
+`,
+    );
+    writeFake('npm', `echo "npm $*" >> "${logFile}"`);
+    writeFake(
+      'sqlite3',
+      `
+echo "sqlite3 $*" >> "${logFile}"
+dest="$(printf '%s' "$2" | sed -n "s/^\\.backup '\\(.*\\)'$/\\1/p")"
+cp "$1" "$dest"
+`,
+    );
+
+    const dryRun = spawnSync('bash', [updaterPath, '--dry-run'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH || ''}`,
+        BIKE_ARCHIV_APP_DIR: appDir,
+        BIKE_ARCHIV_DB_PATH: dbFile,
+        BIKE_ARCHIV_ENV_FILE: path.join(tmpDir, 'missing.env'),
+      },
+    });
+    assert.equal(dryRun.status, 0, dryRun.stderr);
+    assert.match(dryRun.stdout, /Dry-Run aktiv/);
+
+    const updateRun = spawnSync('bash', [updaterPath, '--no-restart'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH || ''}`,
+        BIKE_ARCHIV_APP_DIR: appDir,
+        BIKE_ARCHIV_DB_PATH: dbFile,
+        BIKE_ARCHIV_ENV_FILE: path.join(tmpDir, 'missing.env'),
+      },
+    });
+    assert.equal(updateRun.status, 0, updateRun.stderr);
+    assert.match(updateRun.stdout, /Vorab-Backup erstellt/);
+    assert.match(updateRun.stdout, /erfolgreich aktualisiert/);
+
+    const backupsDir = path.join(tmpDir, 'backups');
+    const backups = fs.readdirSync(backupsDir);
+    assert.equal(backups.length, 1);
+    assert.match(backups[0], /^bike-archiv-pre-update-.*\.sqlite$/);
+
+    const log = fs.readFileSync(logFile, 'utf8');
+    assert.match(log, /git -C .* pull --ff-only origin main/);
+    assert.match(log, /npm ci/);
+    assert.match(log, /npm run build/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

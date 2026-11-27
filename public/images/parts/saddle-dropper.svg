@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img">
+  <defs>
+    <radialGradient id="studioBg" cx="50%" cy="42%" r="68%">
+      <stop offset="0%" stop-color="#f8f9fb"/>
+      <stop offset="100%" stop-color="#e9edf3"/>
+    </radialGradient>
+    <radialGradient id="floorShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(15,23,42,0.22)"/>
+      <stop offset="70%" stop-color="rgba(15,23,42,0.06)"/>
+      <stop offset="100%" stop-color="rgba(15,23,42,0)"/>
+    </radialGradient>
+    <linearGradient id="umber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9b8878"/>
+      <stop offset="45%" stop-color="#7c6b5d"/>
+      <stop offset="100%" stop-color="#584b40"/>
+    </linearGradient>
+    <linearGradient id="umberDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#6b5c50"/>
+      <stop offset="100%" stop-color="#483d34"/>
+    </linearGradient>
+    <linearGradient id="alloyDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3c424d"/>
+      <stop offset="50%" stop-color="#22262d"/>
+      <stop offset="100%" stop-color="#121519"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#eef2f6"/>
+      <stop offset="45%" stop-color="#b6c0cc"/>
+      <stop offset="100%" stop-color="#7c8796"/>
+    </linearGradient>
+    <linearGradient id="foxBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2589ff"/>
+      <stop offset="100%" stop-color="#0b57d0"/>
+    </linearGradient>
+    
+  </defs>
+  <rect width="640" height="480" fill="url(#studioBg)"/>
+  
+  <ellipse cx="320" cy="422" rx="165" ry="15" fill="url(#floorShadow)"/>
+  <!-- Dropper Post -->
+  <rect x="200" y="215" width="38" height="190" rx="6" fill="url(#alloyDark)"/>
+  <rect x="204" y="128" width="30" height="92" rx="4" fill="#14171c" stroke="#3a404b" stroke-width="2"/>
+  <rect x="194" y="208" width="50" height="16" rx="5" fill="#2d333d"/>
+  <!-- Bridge Comp Saddle -->
+  <path d="M 155 112 Q 225 96 310 124 Q 260 138 158 128 Z" fill="#171a1f"/>
+  <path d="M 185 128 L 218 145 L 270 128" fill="none" stroke="url(#steel)" stroke-width="5" stroke-linecap="round"/>
+  <!-- Remote lever -->
+  <rect x="375" y="265" width="86" height="44" rx="10" fill="url(#alloyDark)" stroke="#4f5866" stroke-width="2"/>
+  <path d="M 382 308 L 350 355 L 374 362 L 404 308 Z" fill="#232830"/>
+
+</svg>

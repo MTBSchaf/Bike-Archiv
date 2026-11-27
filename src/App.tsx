@@ -12,7 +12,10 @@ import { OrderModal } from './components/OrderModal';
 import { PartModal } from './components/PartModal';
 import { PartsView } from './components/PartsView';
 import { Toast } from './components/Toast';
+import { UpdateModal } from './components/UpdateModal';
+import { applyTheme, getInitialTheme } from './theme';
 import type {
+  ApplyUpdateResponse,
   Bike,
   BikeFormInput,
   OrderFormInput,
@@ -20,18 +23,23 @@ import type {
   OrderStatus,
   Part,
   PartFormInput,
+  SystemStatus,
   TabKey,
+  ThemeMode,
 } from './types';
 
 export default function App() {
+  const [theme, setTheme] = useState<ThemeMode>(() => getInitialTheme());
   const [activeTab, setActiveTab] = useState<TabKey>('bikes');
   const [selectedBikeId, setSelectedBikeId] = useState<string | null>(null);
   const [bikes, setBikes] = useState<Bike[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [backupModalOpen, setBackupModalOpen] = useState(false);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
   const [bikeModalState, setBikeModalState] = useState<{
     open: boolean;
@@ -73,6 +81,10 @@ export default function App() {
   );
 
   useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
     if (!toast) return undefined;
     const timer = window.setTimeout(() => setToast(null), 2800);
     return () => window.clearTimeout(timer);
@@ -80,10 +92,16 @@ export default function App() {
 
   const loadAll = useCallback(async () => {
     try {
-      const data = await api.getBootstrap();
+      const [data, status] = await Promise.all([
+        api.getBootstrap(),
+        api.getSystemStatus().catch(() => null),
+      ]);
       setBikes(data.bikes);
       setParts(data.parts);
       setOrderItems(data.orderItems);
+      if (status) {
+        setSystemStatus(status);
+      }
       setLoadError('');
     } catch (err) {
       setLoadError(
@@ -113,6 +131,10 @@ export default function App() {
     [orderItems],
   );
 
+  function handleToggleTheme() {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }
+
   function handleSelectTab(tab: TabKey) {
     setActiveTab(tab);
     if (tab !== 'bikes') {
@@ -137,10 +159,10 @@ export default function App() {
     }
   }
 
-  async function handleCopySerial(serial: string) {
+  async function handleCopyText(text: string, label = 'Seriennummer kopiert') {
     try {
-      await navigator.clipboard.writeText(serial);
-      showToast('Seriennummer kopiert');
+      await navigator.clipboard.writeText(text);
+      showToast(label);
     } catch {
       showToast('Kopieren in Zwischenablage nicht möglich', 'error');
     }
@@ -197,7 +219,14 @@ export default function App() {
       name: part.name,
       brand: part.brand,
       category: part.category,
+      subCategory: part.subCategory,
+      partNumber: part.partNumber,
+      quantity: part.quantity,
       specs: part.specs,
+      structuredSpecs: part.structuredSpecs,
+      manufacturerUrl: part.manufacturerUrl,
+      imageUrl: part.imageUrl,
+      catalogKey: part.catalogKey,
       serialNumber: part.serialNumber,
       status: 'in_use',
       bikeId,
@@ -216,7 +245,14 @@ export default function App() {
         name: part.name,
         brand: part.brand,
         category: part.category,
+        subCategory: part.subCategory,
+        partNumber: part.partNumber,
+        quantity: part.quantity,
         specs: part.specs,
+        structuredSpecs: part.structuredSpecs,
+        manufacturerUrl: part.manufacturerUrl,
+        imageUrl: part.imageUrl,
+        catalogKey: part.catalogKey,
         serialNumber: part.serialNumber,
         status,
         bikeId: null,
@@ -246,6 +282,7 @@ export default function App() {
         partId: part.id,
         quantity: 1,
         priority: part.status === 'defective' ? 'high' : 'normal',
+        imageUrl: part.imageUrl,
         notes: part.specs,
       },
     });
@@ -274,6 +311,7 @@ export default function App() {
         priority: item.priority,
         estimatedPrice: item.estimatedPrice,
         shopUrl: item.shopUrl,
+        imageUrl: item.imageUrl,
         status,
         notes: item.notes,
       });
@@ -341,6 +379,30 @@ export default function App() {
     showToast('Backup importiert');
   }
 
+  function applyUpdateState(res: ApplyUpdateResponse) {
+    setBikes(res.bikes);
+    setParts(res.parts);
+    setOrderItems(res.orderItems);
+    setSystemStatus(res.systemStatus);
+    if (selectedBikeId && !res.bikes.some((b) => b.id === selectedBikeId)) {
+      setSelectedBikeId(null);
+    }
+  }
+
+  async function handleApplyCatalogUpdate() {
+    const res = await api.applyCatalogUpdate(true);
+    applyUpdateState(res);
+    showToast('Katalog-Update eingespielt');
+    return res;
+  }
+
+  async function handleApplyPackageUpdate(pkg: unknown) {
+    const res = await api.applyUpdatePackage(pkg);
+    applyUpdateState(res);
+    showToast('Update-Paket eingespielt');
+    return res;
+  }
+
   return (
     <div className="app-shell">
       <Header
@@ -351,6 +413,10 @@ export default function App() {
           parts: parts.length,
           openOrders: openOrdersCount,
         }}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        catalogUpdatePending={Boolean(systemStatus?.catalogUpdatePending)}
+        onOpenUpdates={() => setUpdateModalOpen(true)}
         onPrimaryAction={handlePrimaryAction}
         onOpenBackup={() => setBackupModalOpen(true)}
       />
@@ -385,14 +451,14 @@ export default function App() {
               }
               onMovePartStatus={handleMovePartStatus}
               onOrderPart={handleOpenOrderForPart}
-              onCopySerial={handleCopySerial}
+              onCopySerial={(serial) => void handleCopyText(serial)}
             />
           ) : (
             <BikesView
               bikes={bikes}
               onSelectBike={handleSelectBike}
               onAddBike={() => setBikeModalState({ open: true, bike: null })}
-              onCopySerial={handleCopySerial}
+              onCopySerial={(serial) => void handleCopyText(serial)}
             />
           )
         ) : activeTab === 'parts' ? (
@@ -408,11 +474,12 @@ export default function App() {
             onDeletePart={(part) => setConfirmDelete({ type: 'part', item: part })}
             onSelectBike={handleSelectBike}
             onOrderPart={handleOpenOrderForPart}
-            onCopySerial={handleCopySerial}
+            onCopySerial={(serial) => void handleCopyText(serial)}
           />
         ) : (
           <OrderListView
             orderItems={orderItems}
+            parts={parts}
             onAddOrder={() =>
               setOrderModalState({ open: true, orderItem: null, prefill: null })
             }
@@ -497,6 +564,17 @@ export default function App() {
           onImport={handleImportBackup}
           onExportSuccess={() => showToast('Backup heruntergeladen')}
           onClose={() => setBackupModalOpen(false)}
+        />
+      )}
+
+      {updateModalOpen && (
+        <UpdateModal
+          systemStatus={systemStatus}
+          onCheckRemote={() => api.checkForUpdates()}
+          onApplyCatalog={handleApplyCatalogUpdate}
+          onApplyPackage={handleApplyPackageUpdate}
+          onCopyCommand={(cmd) => void handleCopyText(cmd, 'Update-Befehl kopiert')}
+          onClose={() => setUpdateModalOpen(false)}
         />
       )}
 

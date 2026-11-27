@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img">
+  <defs>
+    <radialGradient id="studioBg" cx="50%" cy="42%" r="68%">
+      <stop offset="0%" stop-color="#f8f9fb"/>
+      <stop offset="100%" stop-color="#e9edf3"/>
+    </radialGradient>
+    <radialGradient id="floorShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(15,23,42,0.22)"/>
+      <stop offset="70%" stop-color="rgba(15,23,42,0.06)"/>
+      <stop offset="100%" stop-color="rgba(15,23,42,0)"/>
+    </radialGradient>
+    <linearGradient id="umber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9b8878"/>
+      <stop offset="45%" stop-color="#7c6b5d"/>
+      <stop offset="100%" stop-color="#584b40"/>
+    </linearGradient>
+    <linearGradient id="umberDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#6b5c50"/>
+      <stop offset="100%" stop-color="#483d34"/>
+    </linearGradient>
+    <linearGradient id="alloyDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3c424d"/>
+      <stop offset="50%" stop-color="#22262d"/>
+      <stop offset="100%" stop-color="#121519"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#eef2f6"/>
+      <stop offset="45%" stop-color="#b6c0cc"/>
+      <stop offset="100%" stop-color="#7c8796"/>
+    </linearGradient>
+    <linearGradient id="foxBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2589ff"/>
+      <stop offset="100%" stop-color="#0b57d0"/>
+    </linearGradient>
+    
+  </defs>
+  <rect width="640" height="480" fill="url(#studioBg)"/>
+  
+  <ellipse cx="320" cy="390" rx="220" ry="15" fill="url(#floorShadow)"/>
+  <!-- 800mm Riser Bar -->
+  <path d="M 75 182 L 195 182 L 245 210 L 395 210 L 445 182 L 565 182" fill="none" stroke="url(#alloyDark)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Lock-on grips -->
+  <rect x="68" y="169" width="86" height="26" rx="8" fill="#14171c" stroke="#3c424d" stroke-width="2"/>
+  <rect x="486" y="169" width="86" height="26" rx="8" fill="#14171c" stroke="#3c424d" stroke-width="2"/>
+  <!-- 40mm Stem -->
+  <rect x="275" y="255" width="90" height="58" rx="14" fill="url(#alloyDark)" stroke="#5b6472" stroke-width="2"/>
+  <circle cx="300" cy="284" r="16" fill="#e9edf3"/>
+  <circle cx="348" cy="284" r="12" fill="#14171c"/>
+
+</svg>

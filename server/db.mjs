@@ -3,6 +3,27 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
+export const SCHEMA_VERSION = '2';
+
+const ALLOWED_MIGRATION_TABLES = new Set(['bikes', 'parts', 'order_items']);
+
+function parseStructuredSpecs(raw) {
+  if (!raw || typeof raw !== 'string') return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry) =>
+        entry &&
+        typeof entry === 'object' &&
+        typeof entry.label === 'string' &&
+        typeof entry.value === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
 function mapSerialRow(row) {
   return {
     id: row.id,
@@ -20,7 +41,14 @@ function mapPartRow(row) {
     name: row.name,
     brand: row.brand,
     category: row.category,
+    subCategory: row.sub_category ?? '',
+    partNumber: row.part_number ?? '',
+    quantity: Number(row.quantity ?? 1),
     specs: row.specs,
+    structuredSpecs: parseStructuredSpecs(row.structured_specs),
+    manufacturerUrl: row.manufacturer_url ?? '',
+    imageUrl: row.image_url ?? '',
+    catalogKey: row.catalog_key ?? '',
     serialNumber: row.serial_number,
     status: row.status,
     bikeId: row.bike_id ?? null,
@@ -43,6 +71,8 @@ function mapBikeRow(row, serials = []) {
     wheelSize: row.wheel_size,
     color: row.color,
     serialNumber: row.serial_number,
+    imageUrl: row.image_url ?? '',
+    manufacturerUrl: row.manufacturer_url ?? '',
     notes: row.notes,
     partCount: Number(row.part_count ?? 0),
     serials,
@@ -64,11 +94,81 @@ function mapOrderRow(row) {
     priority: row.priority,
     estimatedPrice: row.estimated_price ?? null,
     shopUrl: row.shop_url,
+    imageUrl: row.image_url ?? '',
     status: row.status,
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function mapUpdateHistoryRow(row) {
+  return {
+    id: row.id,
+    updateType: row.update_type,
+    version: row.version,
+    description: row.description,
+    details: row.details,
+    appliedAt: row.applied_at,
+  };
+}
+
+function ensureColumn(db, tableName, columnName, columnDef) {
+  if (!ALLOWED_MIGRATION_TABLES.has(tableName)) {
+    throw new Error(`Ungültige Tabelle für Migration: ${tableName}`);
+  }
+  const cols = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  if (!cols.some((c) => c.name === columnName)) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef};`);
+  }
+}
+
+function runSchemaMigrations(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS update_history (
+      id TEXT PRIMARY KEY,
+      update_type TEXT NOT NULL,
+      version TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      details TEXT NOT NULL DEFAULT '',
+      applied_at TEXT NOT NULL
+    );
+  `);
+
+  ensureColumn(db, 'bikes', 'image_url', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'bikes', 'manufacturer_url', "TEXT NOT NULL DEFAULT ''");
+
+  ensureColumn(db, 'parts', 'image_url', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'parts', 'sub_category', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'parts', 'part_number', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'parts', 'quantity', 'INTEGER NOT NULL DEFAULT 1');
+  ensureColumn(db, 'parts', 'manufacturer_url', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'parts', 'structured_specs', "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, 'parts', 'catalog_key', "TEXT NOT NULL DEFAULT ''");
+
+  ensureColumn(db, 'order_items', 'image_url', "TEXT NOT NULL DEFAULT ''");
+
+  db.exec('CREATE INDEX IF NOT EXISTS idx_parts_catalog_key ON parts(catalog_key);');
+
+  const versionRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get();
+  const currentSchema = versionRow ? Number(versionRow.value) : 0;
+  if (currentSchema < Number(SCHEMA_VERSION)) {
+    const now = new Date().toISOString();
+    db.prepare(
+      'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    ).run('schema_version', SCHEMA_VERSION);
+    db.prepare(
+      `INSERT OR IGNORE INTO update_history (id, update_type, version, description, details, applied_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      `schema-v${SCHEMA_VERSION}`,
+      'schema',
+      SCHEMA_VERSION,
+      'Datenbank-Schema auf Version 2 aktualisiert (Bilder, strukturierte Herstellerdaten, Update-Historie).',
+      'Tabellen bikes, parts, order_items und update_history migriert.',
+      now,
+    );
+  }
 }
 
 export function createDatabase(dbPath) {
@@ -151,6 +251,8 @@ export function createDatabase(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_order_items_status ON order_items(status);
   `);
 
+  runSchemaMigrations(db);
+
   const stmtGetMeta = db.prepare('SELECT value FROM meta WHERE key = ?');
   const stmtSetMeta = db.prepare(
     'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
@@ -186,15 +288,15 @@ export function createDatabase(dbPath) {
   const stmtInsertBike = db.prepare(`
     INSERT INTO bikes (
       id, name, brand, model, model_year, category, frame_size, wheel_size,
-      color, serial_number, notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      color, serial_number, image_url, manufacturer_url, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const stmtUpdateBike = db.prepare(`
     UPDATE bikes SET
       name = ?, brand = ?, model = ?, model_year = ?, category = ?,
       frame_size = ?, wheel_size = ?, color = ?, serial_number = ?,
-      notes = ?, updated_at = ?
+      image_url = ?, manufacturer_url = ?, notes = ?, updated_at = ?
     WHERE id = ?
   `);
 
@@ -233,14 +335,17 @@ export function createDatabase(dbPath) {
 
   const stmtInsertPart = db.prepare(`
     INSERT INTO parts (
-      id, name, brand, category, specs, serial_number, status, bike_id, notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, name, brand, category, sub_category, part_number, quantity,
+      specs, structured_specs, manufacturer_url, image_url, catalog_key,
+      serial_number, status, bike_id, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const stmtUpdatePart = db.prepare(`
     UPDATE parts SET
-      name = ?, brand = ?, category = ?, specs = ?, serial_number = ?,
-      status = ?, bike_id = ?, notes = ?, updated_at = ?
+      name = ?, brand = ?, category = ?, sub_category = ?, part_number = ?, quantity = ?,
+      specs = ?, structured_specs = ?, manufacturer_url = ?, image_url = ?, catalog_key = ?,
+      serial_number = ?, status = ?, bike_id = ?, notes = ?, updated_at = ?
     WHERE id = ?
   `);
 
@@ -272,18 +377,37 @@ export function createDatabase(dbPath) {
   const stmtInsertOrder = db.prepare(`
     INSERT INTO order_items (
       id, name, brand, category, bike_id, part_id, quantity, priority,
-      estimated_price, shop_url, status, notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      estimated_price, shop_url, image_url, status, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const stmtUpdateOrder = db.prepare(`
     UPDATE order_items SET
       name = ?, brand = ?, category = ?, bike_id = ?, part_id = ?, quantity = ?,
-      priority = ?, estimated_price = ?, shop_url = ?, status = ?, notes = ?, updated_at = ?
+      priority = ?, estimated_price = ?, shop_url = ?, image_url = ?, status = ?, notes = ?, updated_at = ?
     WHERE id = ?
   `);
 
   const stmtDeleteOrder = db.prepare('DELETE FROM order_items WHERE id = ?');
+
+  const stmtListUpdateHistory = db.prepare(
+    'SELECT * FROM update_history ORDER BY applied_at DESC, rowid DESC',
+  );
+  const stmtHasUpdateHistory = db.prepare('SELECT id FROM update_history WHERE id = ?');
+  const stmtUpsertUpdateHistory = db.prepare(`
+    INSERT INTO update_history (id, update_type, version, description, details, applied_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      update_type = excluded.update_type,
+      version = excluded.version,
+      description = excluded.description,
+      details = excluded.details,
+      applied_at = excluded.applied_at
+  `);
+  const stmtFindPartByCatalogKey = db.prepare(
+    'SELECT * FROM parts WHERE bike_id = ? AND catalog_key = ? LIMIT 1',
+  );
+  const stmtOrderExists = db.prepare('SELECT id FROM order_items WHERE id = ?');
 
   let txDepth = 0;
 
@@ -376,6 +500,8 @@ export function createDatabase(dbPath) {
           input.wheelSize,
           input.color,
           input.serialNumber,
+          input.imageUrl || '',
+          input.manufacturerUrl || '',
           input.notes,
           now,
           now,
@@ -401,6 +527,8 @@ export function createDatabase(dbPath) {
         input.wheelSize,
         input.color,
         input.serialNumber,
+        input.imageUrl || '',
+        input.manufacturerUrl || '',
         input.notes,
         now,
         id,
@@ -442,7 +570,14 @@ export function createDatabase(dbPath) {
         input.name,
         input.brand,
         input.category,
+        input.subCategory || '',
+        input.partNumber || '',
+        Number.isInteger(input.quantity) ? input.quantity : 1,
         input.specs,
+        JSON.stringify(Array.isArray(input.structuredSpecs) ? input.structuredSpecs : []),
+        input.manufacturerUrl || '',
+        input.imageUrl || '',
+        input.catalogKey || '',
         input.serialNumber,
         input.status,
         input.bikeId,
@@ -459,7 +594,14 @@ export function createDatabase(dbPath) {
         input.name,
         input.brand,
         input.category,
+        input.subCategory || '',
+        input.partNumber || '',
+        Number.isInteger(input.quantity) ? input.quantity : 1,
         input.specs,
+        JSON.stringify(Array.isArray(input.structuredSpecs) ? input.structuredSpecs : []),
+        input.manufacturerUrl || '',
+        input.imageUrl || '',
+        input.catalogKey || '',
         input.serialNumber,
         input.status,
         input.bikeId,
@@ -494,6 +636,7 @@ export function createDatabase(dbPath) {
         input.priority,
         input.estimatedPrice,
         input.shopUrl,
+        input.imageUrl || '',
         input.status,
         input.notes,
         now,
@@ -515,6 +658,7 @@ export function createDatabase(dbPath) {
         input.priority,
         input.estimatedPrice,
         input.shopUrl,
+        input.imageUrl || '',
         input.status,
         input.notes,
         now,
@@ -541,7 +685,14 @@ export function createDatabase(dbPath) {
           orderRow.name,
           orderRow.brand,
           orderRow.category,
+          '',
+          '',
+          Number(orderRow.quantity) || 1,
           specs,
+          '[]',
+          '',
+          orderRow.image_url || '',
+          '',
           '',
           'in_stock',
           null,
@@ -560,6 +711,7 @@ export function createDatabase(dbPath) {
           orderRow.priority,
           orderRow.estimated_price,
           orderRow.shop_url,
+          orderRow.image_url || '',
           'received',
           orderRow.notes,
           now,
@@ -569,6 +721,188 @@ export function createDatabase(dbPath) {
         return {
           orderItem: this.getOrderItem(orderId),
           part: this.getPart(partId),
+        };
+      });
+    },
+    listUpdateHistory() {
+      return stmtListUpdateHistory.all().map(mapUpdateHistoryRow);
+    },
+    hasAppliedUpdate(id) {
+      return Boolean(stmtHasUpdateHistory.get(id));
+    },
+    recordUpdateHistory({ id, updateType, version, description = '', details = '' }) {
+      const now = new Date().toISOString();
+      stmtUpsertUpdateHistory.run(id, updateType, version, description, details, now);
+    },
+    applyIncrementalUpdate(pkg) {
+      return runInTransaction(() => {
+        const now = new Date().toISOString();
+        let bikesAdded = 0;
+        let bikesUpdated = 0;
+        let partsAdded = 0;
+        let partsUpdated = 0;
+        let ordersAdded = 0;
+
+        for (const bike of pkg.bikes) {
+          const existingRow = stmtGetBike.get(bike.id);
+          if (!existingRow) {
+            stmtInsertBike.run(
+              bike.id,
+              bike.name,
+              bike.brand,
+              bike.model,
+              bike.modelYear,
+              bike.category,
+              bike.frameSize,
+              bike.wheelSize,
+              bike.color,
+              bike.serialNumber,
+              bike.imageUrl || '',
+              bike.manufacturerUrl || '',
+              bike.notes,
+              bike.createdAt || now,
+              now,
+            );
+            for (const serial of bike.serials || []) {
+              stmtInsertSerial.run(
+                serial.id,
+                bike.id,
+                serial.label,
+                serial.serialNumber,
+                serial.notes,
+                serial.createdAt || now,
+              );
+            }
+            bikesAdded += 1;
+          } else {
+            stmtUpdateBike.run(
+              bike.name || existingRow.name,
+              bike.brand || existingRow.brand,
+              bike.model || existingRow.model,
+              bike.modelYear ?? existingRow.model_year,
+              bike.category || existingRow.category,
+              bike.frameSize || existingRow.frame_size,
+              bike.wheelSize || existingRow.wheel_size,
+              bike.color || existingRow.color,
+              existingRow.serial_number || bike.serialNumber || '',
+              bike.imageUrl || existingRow.image_url || '',
+              bike.manufacturerUrl || existingRow.manufacturer_url || '',
+              existingRow.notes || bike.notes || '',
+              now,
+              bike.id,
+            );
+            bikesUpdated += 1;
+          }
+        }
+
+        for (const part of pkg.parts) {
+          let existingRow = stmtGetPart.get(part.id);
+          if (!existingRow && part.bikeId && part.catalogKey) {
+            existingRow = stmtFindPartByCatalogKey.get(part.bikeId, part.catalogKey);
+          }
+
+          if (!existingRow) {
+            const targetBikeId =
+              part.status === 'in_use' && part.bikeId && stmtBikeExists.get(part.bikeId)
+                ? part.bikeId
+                : null;
+            const targetStatus = targetBikeId ? 'in_use' : part.status === 'in_use' ? 'in_stock' : part.status;
+            stmtInsertPart.run(
+              part.id,
+              part.name,
+              part.brand,
+              part.category,
+              part.subCategory || '',
+              part.partNumber || '',
+              Number.isInteger(part.quantity) ? part.quantity : 1,
+              part.specs,
+              JSON.stringify(Array.isArray(part.structuredSpecs) ? part.structuredSpecs : []),
+              part.manufacturerUrl || '',
+              part.imageUrl || '',
+              part.catalogKey || '',
+              part.serialNumber,
+              targetStatus,
+              targetBikeId,
+              part.notes,
+              part.createdAt || now,
+              now,
+            );
+            partsAdded += 1;
+          } else {
+            stmtUpdatePart.run(
+              part.name || existingRow.name,
+              part.brand || existingRow.brand,
+              part.category || existingRow.category,
+              part.subCategory || existingRow.sub_category || '',
+              part.partNumber || existingRow.part_number || '',
+              Number.isInteger(part.quantity) ? part.quantity : Number(existingRow.quantity ?? 1),
+              part.specs || existingRow.specs,
+              JSON.stringify(
+                Array.isArray(part.structuredSpecs) && part.structuredSpecs.length > 0
+                  ? part.structuredSpecs
+                  : parseStructuredSpecs(existingRow.structured_specs),
+              ),
+              part.manufacturerUrl || existingRow.manufacturer_url || '',
+              part.imageUrl || existingRow.image_url || '',
+              part.catalogKey || existingRow.catalog_key || '',
+              existingRow.serial_number || part.serialNumber || '',
+              existingRow.status,
+              existingRow.bike_id,
+              existingRow.notes || part.notes || '',
+              now,
+              existingRow.id,
+            );
+            partsUpdated += 1;
+          }
+        }
+
+        for (const item of pkg.orderItems) {
+          if (!stmtOrderExists.get(item.id)) {
+            const validBikeId = item.bikeId && stmtBikeExists.get(item.bikeId) ? item.bikeId : null;
+            const validPartId = item.partId && stmtPartExists.get(item.partId) ? item.partId : null;
+            stmtInsertOrder.run(
+              item.id,
+              item.name,
+              item.brand,
+              item.category,
+              validBikeId,
+              validPartId,
+              item.quantity,
+              item.priority,
+              item.estimatedPrice,
+              item.shopUrl,
+              item.imageUrl || '',
+              item.status,
+              item.notes,
+              item.createdAt || now,
+              now,
+            );
+            ordersAdded += 1;
+          }
+        }
+
+        const details = `${bikesAdded} Bikes neu, ${bikesUpdated} Bikes aktualisiert, ${partsAdded} Teile neu, ${partsUpdated} Teile aktualisiert, ${ordersAdded} Bestellungen neu.`;
+        stmtUpsertUpdateHistory.run(
+          pkg.updateId,
+          'package',
+          pkg.version,
+          pkg.description || `Update-Paket ${pkg.version}`,
+          details,
+          now,
+        );
+
+        return {
+          summary: {
+            bikesAdded,
+            bikesUpdated,
+            partsAdded,
+            partsUpdated,
+            ordersAdded,
+          },
+          bikes: this.listBikes(),
+          parts: this.listParts(),
+          orderItems: this.listOrderItems(),
+          updateHistory: this.listUpdateHistory(),
         };
       });
     },
@@ -588,6 +922,8 @@ export function createDatabase(dbPath) {
             bike.wheelSize,
             bike.color,
             bike.serialNumber,
+            bike.imageUrl || '',
+            bike.manufacturerUrl || '',
             bike.notes,
             bike.createdAt,
             bike.updatedAt,
@@ -610,7 +946,14 @@ export function createDatabase(dbPath) {
             part.name,
             part.brand,
             part.category,
+            part.subCategory || '',
+            part.partNumber || '',
+            Number.isInteger(part.quantity) ? part.quantity : 1,
             part.specs,
+            JSON.stringify(Array.isArray(part.structuredSpecs) ? part.structuredSpecs : []),
+            part.manufacturerUrl || '',
+            part.imageUrl || '',
+            part.catalogKey || '',
             part.serialNumber,
             part.status,
             part.bikeId,
@@ -632,6 +975,7 @@ export function createDatabase(dbPath) {
             item.priority,
             item.estimatedPrice,
             item.shopUrl,
+            item.imageUrl || '',
             item.status,
             item.notes,
             item.createdAt,

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { X } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import {
   PART_CATEGORIES,
   type Bike,
@@ -7,7 +7,9 @@ import {
   type PartCategory,
   type PartFormInput,
   type PartStatus,
+  type StructuredSpec,
 } from '../types';
+import { ImageField } from './ImageField';
 
 interface PartModalProps {
   part: Part | null;
@@ -29,7 +31,15 @@ export function PartModal({
   const [category, setCategory] = useState<PartCategory>(
     part?.category ?? 'Antrieb',
   );
+  const [subCategory, setSubCategory] = useState(part?.subCategory ?? '');
+  const [partNumber, setPartNumber] = useState(part?.partNumber ?? '');
+  const [quantity, setQuantity] = useState(String(part?.quantity ?? 1));
   const [specs, setSpecs] = useState(part?.specs ?? '');
+  const [structuredSpecs, setStructuredSpecs] = useState<StructuredSpec[]>(
+    part?.structuredSpecs ?? [],
+  );
+  const [manufacturerUrl, setManufacturerUrl] = useState(part?.manufacturerUrl ?? '');
+  const [imageUrl, setImageUrl] = useState(part?.imageUrl ?? '');
   const [serialNumber, setSerialNumber] = useState(part?.serialNumber ?? '');
   const [status, setStatus] = useState<PartStatus>(
     part?.status ?? (defaultBikeId ? 'in_use' : 'in_stock'),
@@ -40,6 +50,20 @@ export function PartModal({
   const [notes, setNotes] = useState(part?.notes ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  function addStructuredSpec() {
+    setStructuredSpecs((prev) => [...prev, { label: '', value: '' }]);
+  }
+
+  function updateStructuredSpec(index: number, patch: Partial<StructuredSpec>) {
+    setStructuredSpecs((prev) =>
+      prev.map((entry, idx) => (idx === index ? { ...entry, ...patch } : entry)),
+    );
+  }
+
+  function removeStructuredSpec(index: number) {
+    setStructuredSpecs((prev) => prev.filter((_, idx) => idx !== index));
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -54,6 +78,23 @@ export function PartModal({
       return;
     }
 
+    const parsedQty = Number(quantity);
+    if (!Number.isInteger(parsedQty) || parsedQty < 1 || parsedQty > 999) {
+      setError('Menge muss eine ganze Zahl zwischen 1 und 999 sein.');
+      return;
+    }
+
+    const cleanedStructuredSpecs = structuredSpecs
+      .map((s) => ({ label: s.label.trim(), value: s.value.trim() }))
+      .filter((s) => s.label || s.value);
+
+    for (const s of cleanedStructuredSpecs) {
+      if (!s.label || !s.value) {
+        setError('Jede strukturierte Spezifikation benötigt Eigenschaft und Wert.');
+        return;
+      }
+    }
+
     setBusy(true);
     try {
       await onSave(
@@ -61,7 +102,14 @@ export function PartModal({
           name: name.trim(),
           brand: brand.trim(),
           category,
+          subCategory: subCategory.trim(),
+          partNumber: partNumber.trim(),
+          quantity: parsedQty,
           specs: specs.trim(),
+          structuredSpecs: cleanedStructuredSpecs,
+          manufacturerUrl: manufacturerUrl.trim(),
+          imageUrl: imageUrl.trim(),
+          catalogKey: part?.catalogKey || '',
           serialNumber: serialNumber.trim(),
           status,
           bikeId: status === 'in_use' ? bikeId : null,
@@ -96,6 +144,13 @@ export function PartModal({
 
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
+            <ImageField
+              label="Produktbild"
+              value={imageUrl}
+              onChange={setImageUrl}
+              placeholder="/images/parts/... oder https://..."
+            />
+
             <div className="form-field full">
               <label className="form-label" htmlFor="part-name">
                 Bezeichnung *
@@ -139,6 +194,32 @@ export function PartModal({
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="form-field">
+              <label className="form-label" htmlFor="part-subcategory">
+                Unterkategorie
+              </label>
+              <input
+                id="part-subcategory"
+                className="input"
+                value={subCategory}
+                onChange={(e) => setSubCategory(e.target.value)}
+                placeholder="z. B. Federgabel, Hinterbaulager"
+              />
+            </div>
+
+            <div className="form-field">
+              <label className="form-label" htmlFor="part-number">
+                Hersteller-Teilenummer
+              </label>
+              <input
+                id="part-number"
+                className="input mono"
+                value={partNumber}
+                onChange={(e) => setPartNumber(e.target.value)}
+                placeholder="z. B. 00.5315.023.010"
+              />
             </div>
 
             <div className="form-field">
@@ -188,9 +269,37 @@ export function PartModal({
               </select>
             </div>
 
+            <div className="form-field">
+              <label className="form-label" htmlFor="part-quantity">
+                Stückzahl
+              </label>
+              <input
+                id="part-quantity"
+                type="number"
+                className="input"
+                min={1}
+                max={999}
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+              />
+            </div>
+
+            <div className="form-field">
+              <label className="form-label" htmlFor="part-serial">
+                Seriennummer (optional)
+              </label>
+              <input
+                id="part-serial"
+                className="input mono"
+                value={serialNumber}
+                onChange={(e) => setSerialNumber(e.target.value)}
+                placeholder="Konkrete Teile-Seriennummer"
+              />
+            </div>
+
             <div className="form-field full">
               <label className="form-label" htmlFor="part-specs">
-                Spezifikation
+                Kurz-Spezifikation
               </label>
               <input
                 id="part-specs"
@@ -202,16 +311,70 @@ export function PartModal({
             </div>
 
             <div className="form-field full">
-              <label className="form-label" htmlFor="part-serial">
-                Seriennummer (optional)
+              <label className="form-label" htmlFor="part-manufacturer-url">
+                Herstellerseite (optional)
               </label>
               <input
-                id="part-serial"
-                className="input mono"
-                value={serialNumber}
-                onChange={(e) => setSerialNumber(e.target.value)}
-                placeholder="Konkrete Teile-Seriennummer"
+                id="part-manufacturer-url"
+                type="url"
+                className="input"
+                value={manufacturerUrl}
+                onChange={(e) => setManufacturerUrl(e.target.value)}
+                placeholder="https://www.sram.com/..."
               />
+            </div>
+
+            <div className="form-field full">
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span className="form-label">Strukturierte Herstellerangaben</span>
+                <button
+                  type="button"
+                  className="btn btn-subtle btn-sm"
+                  onClick={addStructuredSpec}
+                >
+                  <Plus size={14} />
+                  <span>Eigenschaft hinzufügen</span>
+                </button>
+              </div>
+
+              {structuredSpecs.length > 0 && (
+                <div className="spec-editor-list" style={{ marginTop: 6 }}>
+                  {structuredSpecs.map((spec, idx) => (
+                    <div key={idx} className="spec-editor-row">
+                      <input
+                        className="input"
+                        placeholder="Eigenschaft (z. B. Drehmoment)"
+                        value={spec.label}
+                        onChange={(e) =>
+                          updateStructuredSpec(idx, { label: e.target.value })
+                        }
+                      />
+                      <input
+                        className="input"
+                        placeholder="Wert (z. B. 6,2 Nm)"
+                        value={spec.value}
+                        onChange={(e) =>
+                          updateStructuredSpec(idx, { value: e.target.value })
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="icon-btn danger"
+                        aria-label="Zeile entfernen"
+                        onClick={() => removeStructuredSpec(idx)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="form-field full">

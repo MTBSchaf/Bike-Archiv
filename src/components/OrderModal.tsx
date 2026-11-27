@@ -9,6 +9,7 @@ import {
   type OrderStatus,
   type PartCategory,
 } from '../types';
+import { ImageField } from './ImageField';
 
 interface OrderModalProps {
   orderItem: OrderItem | null;
@@ -41,6 +42,7 @@ export function OrderModal({
       : '',
   );
   const [shopUrl, setShopUrl] = useState(orderItem?.shopUrl ?? '');
+  const [imageUrl, setImageUrl] = useState(orderItem?.imageUrl ?? prefill?.imageUrl ?? '');
   const [status, setStatus] = useState<OrderStatus>(orderItem?.status ?? 'open');
   const [notes, setNotes] = useState(orderItem?.notes ?? prefill?.notes ?? '');
   const [busy, setBusy] = useState(false);
@@ -83,6 +85,7 @@ export function OrderModal({
           priority,
           estimatedPrice: parsedPrice,
           shopUrl: shopUrl.trim(),
+          imageUrl: imageUrl.trim(),
           status,
           notes: notes.trim(),
         },
@@ -115,6 +118,12 @@ export function OrderModal({
 
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
+            <ImageField
+              label="Produktbild"
+              value={imageUrl}
+              onChange={setImageUrl}
+            />
+
             <div className="form-field full">
               <label className="form-label" htmlFor="order-name">
                 Artikelbezeichnung *

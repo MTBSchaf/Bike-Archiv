@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Plus, Trash2, X } from 'lucide-react';
 import type { Bike, BikeFormInput } from '../types';
+import { ImageField } from './ImageField';
 
 interface BikeModalProps {
   bike: Bike | null;
@@ -25,6 +26,8 @@ export function BikeModal({ bike, onSave, onClose }: BikeModalProps) {
   const [wheelSize, setWheelSize] = useState(bike?.wheelSize ?? '');
   const [color, setColor] = useState(bike?.color ?? '');
   const [serialNumber, setSerialNumber] = useState(bike?.serialNumber ?? '');
+  const [imageUrl, setImageUrl] = useState(bike?.imageUrl ?? '');
+  const [manufacturerUrl, setManufacturerUrl] = useState(bike?.manufacturerUrl ?? '');
   const [notes, setNotes] = useState(bike?.notes ?? '');
   const [extraSerials, setExtraSerials] = useState<DraftSerial[]>([]);
   const [busy, setBusy] = useState(false);
@@ -78,6 +81,8 @@ export function BikeModal({ bike, onSave, onClose }: BikeModalProps) {
           wheelSize: wheelSize.trim(),
           color: color.trim(),
           serialNumber: serialNumber.trim(),
+          imageUrl: imageUrl.trim(),
+          manufacturerUrl: manufacturerUrl.trim(),
           notes: notes.trim(),
           ...(isEditing ? {} : { serials: filteredSerials }),
         },
@@ -110,6 +115,13 @@ export function BikeModal({ bike, onSave, onClose }: BikeModalProps) {
 
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
+            <ImageField
+              label="Bike-Foto"
+              value={imageUrl}
+              onChange={setImageUrl}
+              placeholder="/images/bikes/specialized-status-160.svg"
+            />
+
             <div className="form-field">
               <label className="form-label" htmlFor="bike-brand">
                 Marke *
@@ -229,6 +241,20 @@ export function BikeModal({ bike, onSave, onClose }: BikeModalProps) {
                 value={serialNumber}
                 onChange={(e) => setSerialNumber(e.target.value)}
                 placeholder="z. B. WSBC000000000"
+              />
+            </div>
+
+            <div className="form-field full">
+              <label className="form-label" htmlFor="bike-manufacturer-url">
+                Herstellerseite (optional)
+              </label>
+              <input
+                id="bike-manufacturer-url"
+                type="url"
+                className="input"
+                value={manufacturerUrl}
+                onChange={(e) => setManufacturerUrl(e.target.value)}
+                placeholder="https://www.specialized.com/..."
               />
             </div>
 

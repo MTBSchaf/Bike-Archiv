@@ -1,4 +1,5 @@
 import type {
+  ApplyUpdateResponse,
   Bike,
   BikeFormInput,
   BikeSerial,
@@ -7,6 +8,8 @@ import type {
   OrderItem,
   Part,
   PartFormInput,
+  SystemStatus,
+  UpdateCheckResult,
 } from './types';
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -158,6 +161,33 @@ export const api = {
     return request<BootstrapPayload>('/api/import', {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  },
+  uploadImage(mimeType: string, dataBase64: string): Promise<{ imageUrl: string }> {
+    return request<{ imageUrl: string }>('/api/uploads', {
+      method: 'POST',
+      body: JSON.stringify({ mimeType, dataBase64 }),
+    });
+  },
+  getSystemStatus(): Promise<SystemStatus> {
+    return request<SystemStatus>('/api/system/status');
+  },
+  checkForUpdates(): Promise<UpdateCheckResult> {
+    return request<UpdateCheckResult>('/api/system/check-update', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+  applyCatalogUpdate(force = false): Promise<ApplyUpdateResponse> {
+    return request<ApplyUpdateResponse>('/api/system/apply-update', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'catalog', force }),
+    });
+  },
+  applyUpdatePackage(pkg: unknown): Promise<ApplyUpdateResponse> {
+    return request<ApplyUpdateResponse>('/api/system/apply-update', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'package', package: pkg }),
     });
   },
 };

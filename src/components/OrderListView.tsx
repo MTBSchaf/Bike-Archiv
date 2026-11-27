@@ -9,10 +9,11 @@ import {
   ShoppingCart,
   Trash2,
 } from 'lucide-react';
-import type { OrderItem, OrderPriority, OrderStatus } from '../types';
+import type { OrderItem, OrderPriority, OrderStatus, Part, PartCategory } from '../types';
 
 interface OrderListViewProps {
   orderItems: OrderItem[];
+  parts: Part[];
   onAddOrder: () => void;
   onEditOrder: (item: OrderItem) => void;
   onDeleteOrder: (item: OrderItem) => void;
@@ -45,6 +46,18 @@ const STATUS_CLASSES: Record<OrderStatus, string> = {
   received: 'badge badge-order-received',
 };
 
+const CATEGORY_DEFAULT_IMAGES: Record<PartCategory, string> = {
+  Rahmen: '/images/parts/frame-m5-alloy.svg',
+  Fahrwerk: '/images/parts/fork-fox-36-rhythm.svg',
+  Antrieb: '/images/parts/drivetrain-derailleur.svg',
+  Bremsen: '/images/parts/brake-code-r.svg',
+  'Laufräder & Reifen': '/images/parts/wheel-alloy-mtb.svg',
+  'Cockpit & Sattel': '/images/parts/cockpit-bar-stem.svg',
+  'Lager & Achsen': '/images/parts/hardware-bearings-bolts.svg',
+  'Schrauben & Kleinteile': '/images/parts/seatclamp-smallparts.svg',
+  Sonstiges: '/images/parts/seatclamp-smallparts.svg',
+};
+
 function formatCurrency(value: number | null): string {
   if (value === null || value === undefined) return '–';
   return new Intl.NumberFormat('de-DE', {
@@ -55,6 +68,7 @@ function formatCurrency(value: number | null): string {
 
 export function OrderListView({
   orderItems,
+  parts,
   onAddOrder,
   onEditOrder,
   onDeleteOrder,
@@ -64,6 +78,24 @@ export function OrderListView({
 }: OrderListViewProps) {
   const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
   const [query, setQuery] = useState('');
+
+  const partImageById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const part of parts) {
+      if (part.imageUrl) {
+        map.set(part.id, part.imageUrl);
+      }
+    }
+    return map;
+  }, [parts]);
+
+  function resolveOrderImage(item: OrderItem): string {
+    if (item.imageUrl) return item.imageUrl;
+    if (item.partId && partImageById.has(item.partId)) {
+      return partImageById.get(item.partId)!;
+    }
+    return CATEGORY_DEFAULT_IMAGES[item.category] || '/images/parts/seatclamp-smallparts.svg';
+  }
 
   const counts = useMemo(() => {
     let open = 0;
@@ -191,24 +223,30 @@ export function OrderListView({
                 {filteredItems.map((item) => (
                   <tr key={item.id}>
                     <td>
-                      <div className="item-title">
-                        {item.name}
-                        {item.brand && (
-                          <span
-                            style={{
-                              fontWeight: 450,
-                              color: 'var(--text-secondary)',
-                              marginLeft: 8,
-                              fontSize: 12.5,
-                            }}
-                          >
-                            {item.brand}
-                          </span>
-                        )}
-                      </div>
-                      <div className="item-sub">
-                        {item.category}
-                        {item.notes ? ` · ${item.notes}` : ''}
+                      <div className="table-item-with-thumb">
+                        <div className="part-thumb">
+                          <img src={resolveOrderImage(item)} alt={item.name} loading="lazy" />
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="item-title">
+                            <span>{item.name}</span>
+                            {item.brand && (
+                              <span
+                                style={{
+                                  fontWeight: 450,
+                                  color: 'var(--text-secondary)',
+                                  fontSize: 12.5,
+                                }}
+                              >
+                                {item.brand}
+                              </span>
+                            )}
+                          </div>
+                          <div className="item-sub">
+                            {item.category}
+                            {item.notes ? ` · ${item.notes}` : ''}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td>{item.quantity}×</td>
@@ -313,13 +351,18 @@ export function OrderListView({
                     alignItems: 'flex-start',
                   }}
                 >
-                  <div>
-                    <div className="item-title">
-                      {item.quantity}× {item.name}
+                  <div className="table-item-with-thumb">
+                    <div className="part-thumb">
+                      <img src={resolveOrderImage(item)} alt={item.name} loading="lazy" />
                     </div>
-                    <div className="item-sub">
-                      {item.brand ? `${item.brand} · ` : ''}
-                      {item.category}
+                    <div>
+                      <div className="item-title">
+                        {item.quantity}× {item.name}
+                      </div>
+                      <div className="item-sub">
+                        {item.brand ? `${item.brand} · ` : ''}
+                        {item.category}
+                      </div>
                     </div>
                   </div>
                   <span className={STATUS_CLASSES[item.status]}>

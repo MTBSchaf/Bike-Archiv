@@ -3,14 +3,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { createDatabase } from '../server/db.mjs';
-import { seedInitialData, SPECIALIZED_STATUS_160_ID } from '../server/seed.mjs';
+import {
+  applyCatalogUpdates,
+  seedInitialData,
+  SPECIALIZED_STATUS_160_ID,
+  SPECIALIZED_STATUS_160_PARTS,
+} from '../server/seed.mjs';
 import { createAppServer } from '../server/app.mjs';
 
-async function startTestServer() {
+async function startTestServer({ uploadsDir = null } = {}) {
   const db = createDatabase(':memory:');
   seedInitialData(db);
-  const server = createAppServer({ db, serveStatic: false });
+  const server = createAppServer({ db, serveStatic: false, uploadsDir });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -42,7 +48,7 @@ async function apiFetch(baseUrl, path, { method = 'GET', body, includeCsrf = tru
   return { res, data };
 }
 
-test('Initialer Seed enthält Specialized Status 160 mit allen 21 verbauten Teilen', async () => {
+test('Initialer Seed enthält Specialized Status 160 mit allen 60 verbauten Teilen, Bildern und Herstellerdaten', async () => {
   const ctx = await startTestServer();
   try {
     const { res, data } = await apiFetch(ctx.baseUrl, '/api/bootstrap');
@@ -51,19 +57,25 @@ test('Initialer Seed enthält Specialized Status 160 mit allen 21 verbauten Teil
     const bike = data.bikes[0];
     assert.equal(bike.id, SPECIALIZED_STATUS_160_ID);
     assert.equal(bike.name, 'Specialized Status 160');
-    assert.equal(bike.partCount, 21);
-    assert.equal(data.parts.length, 21);
+    assert.equal(bike.imageUrl, '/images/bikes/specialized-status-160.svg');
+    assert.match(bike.manufacturerUrl, /^https:\/\/www\.specialized\.com\//);
+    assert.equal(SPECIALIZED_STATUS_160_PARTS.length, 60);
+    assert.equal(bike.partCount, 60);
+    assert.equal(data.parts.length, 60);
 
     for (const part of data.parts) {
       assert.equal(part.status, 'in_use');
       assert.equal(part.bikeId, SPECIALIZED_STATUS_160_ID);
       assert.equal(part.bikeName, 'Specialized Status 160');
+      assert.ok(part.imageUrl.startsWith('/images/parts/'), `Bild fehlt bei ${part.name}`);
+      assert.ok(Array.isArray(part.structuredSpecs) && part.structuredSpecs.length >= 3, `Specs fehlen bei ${part.name}`);
+      assert.match(part.manufacturerUrl, /^https:\/\//, `Hersteller-URL fehlt bei ${part.name}`);
     }
 
     // Idempotenz prüfen
     seedInitialData(ctx.db);
     assert.equal(ctx.db.listBikes().length, 1);
-    assert.equal(ctx.db.listParts().length, 21);
+    assert.equal(ctx.db.listParts().length, 60);
   } finally {
     await ctx.close();
   }
@@ -417,5 +429,253 @@ test('Static-File-Serving liefert Frontend per GET und HEAD aus', async () => {
     await new Promise((resolve) => server.close(resolve));
     db.close();
     fs.rmSync(tmpDist, { recursive: true, force: true });
+  }
+});
+
+test('Upgrade-Migration v1.0.0 -> v1.1.0 behält eigene Daten/Seriennummern und ergänzt 60 Status-160-Teile', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bike-archiv-upgrade-'));
+  const dbFile = path.join(tmpDir, 'legacy.sqlite');
+
+  try {
+    // Alte v1.0.0 Datenbank anlegen
+    const legacy = new DatabaseSync(dbFile);
+    legacy.exec(`
+      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE bikes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        brand TEXT NOT NULL,
+        model TEXT NOT NULL,
+        model_year INTEGER,
+        category TEXT NOT NULL,
+        frame_size TEXT NOT NULL DEFAULT '',
+        wheel_size TEXT NOT NULL DEFAULT '',
+        color TEXT NOT NULL DEFAULT '',
+        serial_number TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE bike_serials (
+        id TEXT PRIMARY KEY,
+        bike_id TEXT NOT NULL REFERENCES bikes(id) ON DELETE CASCADE,
+        label TEXT NOT NULL,
+        serial_number TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE parts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        brand TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL,
+        specs TEXT NOT NULL DEFAULT '',
+        serial_number TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL,
+        bike_id TEXT REFERENCES bikes(id) ON DELETE SET NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE order_items (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        brand TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT 'Sonstiges',
+        bike_id TEXT,
+        part_id TEXT,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        priority TEXT NOT NULL DEFAULT 'normal',
+        estimated_price REAL,
+        shop_url TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'open',
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+
+    const now = '2026-11-26T10:00:00.000Z';
+    legacy.prepare("INSERT INTO meta (key, value) VALUES ('initial_seed_applied', '1')").run();
+    legacy
+      .prepare(
+        `INSERT INTO bikes (id, name, brand, model, model_year, category, frame_size, wheel_size, color, serial_number, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        SPECIALIZED_STATUS_160_ID,
+        'Specialized Status 160',
+        'Specialized',
+        'Status 160',
+        2022,
+        'Enduro / Trail',
+        'S3',
+        '29" / 27.5" Mullet',
+        'Satin Cast Umber / Clay',
+        'WSBC-USER-CUSTOM-99',
+        'Eigene Notiz bleibt erhalten',
+        now,
+        now,
+      );
+    legacy
+      .prepare(
+        `INSERT INTO bikes (id, name, brand, model, model_year, category, serial_number, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run('bike-user-2', 'Trek Slash', 'Trek', 'Slash 8', 2023, 'Enduro', 'TREK-555', now, now);
+    legacy
+      .prepare(
+        `INSERT INTO parts (id, name, brand, category, specs, serial_number, status, bike_id, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'legacy-fork-1',
+        'FOX FLOAT 36 Rhythm',
+        'FOX',
+        'Fahrwerk',
+        '160 mm',
+        'FOX-SN-777',
+        'in_use',
+        SPECIALIZED_STATUS_160_ID,
+        'Gabelservice erledigt',
+        now,
+        now,
+      );
+    legacy.close();
+
+    // Mit neuer Version öffnen & migrieren
+    const db = createDatabase(dbFile);
+    seedInitialData(db);
+    const updateRes = applyCatalogUpdates(db);
+    assert.equal(updateRes.applied, true);
+    assert.equal(updateRes.partsUpdated, 1);
+    assert.equal(updateRes.partsAdded, 59);
+
+    const statusBike = db.getBike(SPECIALIZED_STATUS_160_ID);
+    assert.equal(statusBike.serialNumber, 'WSBC-USER-CUSTOM-99');
+    assert.equal(statusBike.notes, 'Eigene Notiz bleibt erhalten');
+    assert.equal(statusBike.imageUrl, '/images/bikes/specialized-status-160.svg');
+    assert.equal(statusBike.partCount, 60);
+
+    const migratedFork = statusBike.parts.find((p) => p.id === 'legacy-fork-1');
+    assert.ok(migratedFork);
+    assert.equal(migratedFork.serialNumber, 'FOX-SN-777');
+    assert.equal(migratedFork.notes, 'Gabelservice erledigt');
+    assert.equal(migratedFork.imageUrl, '/images/parts/fork-fox-36-rhythm.svg');
+    assert.ok(migratedFork.structuredSpecs.length >= 6);
+
+    const customBike = db.getBike('bike-user-2');
+    assert.ok(customBike);
+    assert.equal(customBike.serialNumber, 'TREK-555');
+
+    // Zweiter Aufruf ist idempotent
+    const secondRun = applyCatalogUpdates(db);
+    assert.equal(secondRun.applied, false);
+    assert.equal(db.getBike(SPECIALIZED_STATUS_160_ID).partCount, 60);
+    db.close();
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('Bild-Upload validiert Format/Magic-Bytes, benötigt CSRF und liefert unter /uploads/ aus', async () => {
+  const tmpUploads = fs.mkdtempSync(path.join(os.tmpdir(), 'bike-archiv-uploads-'));
+  const ctx = await startTestServer({ uploadsDir: tmpUploads });
+  try {
+    // 1x1 PNG
+    const validPngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+    const noCsrf = await apiFetch(ctx.baseUrl, '/api/uploads', {
+      method: 'POST',
+      includeCsrf: false,
+      body: { mimeType: 'image/png', dataBase64: validPngBase64 },
+    });
+    assert.equal(noCsrf.res.status, 403);
+
+    const badMime = await apiFetch(ctx.baseUrl, '/api/uploads', {
+      method: 'POST',
+      body: {
+        mimeType: 'image/svg+xml',
+        dataBase64: Buffer.from('<svg></svg>').toString('base64'),
+      },
+    });
+    assert.equal(badMime.res.status, 400);
+
+    const badMagic = await apiFetch(ctx.baseUrl, '/api/uploads', {
+      method: 'POST',
+      body: {
+        mimeType: 'image/png',
+        dataBase64: Buffer.from('not-a-png').toString('base64'),
+      },
+    });
+    assert.equal(badMagic.res.status, 400);
+
+    const okUpload = await apiFetch(ctx.baseUrl, '/api/uploads', {
+      method: 'POST',
+      body: { mimeType: 'image/png', dataBase64: validPngBase64 },
+    });
+    assert.equal(okUpload.res.status, 201);
+    assert.match(okUpload.data.imageUrl, /^\/uploads\/[a-f0-9-]{36}\.png$/);
+
+    const fetchImg = await fetch(`${ctx.baseUrl}${okUpload.data.imageUrl}`);
+    assert.equal(fetchImg.status, 200);
+    assert.equal(fetchImg.headers.get('content-type'), 'image/png');
+  } finally {
+    await ctx.close();
+    fs.rmSync(tmpUploads, { recursive: true, force: true });
+  }
+});
+
+test('System-Status und inkrementelles Update-Paket über /api/system/*', async () => {
+  const ctx = await startTestServer();
+  try {
+    const statusRes = await apiFetch(ctx.baseUrl, '/api/system/status');
+    assert.equal(statusRes.res.status, 200);
+    assert.equal(statusRes.data.schemaVersion, '2');
+    assert.equal(statusRes.data.catalogVersion, '1.1.0');
+    assert.ok(Array.isArray(statusRes.data.updateHistory));
+
+    const pkgRes = await apiFetch(ctx.baseUrl, '/api/system/apply-update', {
+      method: 'POST',
+      body: {
+        mode: 'package',
+        package: {
+          updateId: 'patch-2026-11-28-pedals',
+          version: '1.1.1',
+          description: 'Ergänzt Pedale als Ersatzteil im Lager',
+          parts: [
+            {
+              id: 'part-update-pedal-1',
+              catalogKey: 'custom-pedals-1',
+              name: 'OneUp Aluminium Pedale',
+              brand: 'OneUp',
+              category: 'Antrieb',
+              subCategory: 'Pedale',
+              partNumber: '1C0552BLK',
+              quantity: 2,
+              specs: 'Plattformpedale mit 10 Pins pro Seite',
+              structuredSpecs: [
+                { label: 'Plattform', value: '115 × 105 mm Aluminium' },
+                { label: 'Pins', value: '10 pro Seite' },
+              ],
+              manufacturerUrl: 'https://www.oneupcomponents.com',
+              imageUrl: '/images/parts/drivetrain-crankset.svg',
+              status: 'in_stock',
+            },
+          ],
+        },
+      },
+    });
+    assert.equal(pkgRes.res.status, 200);
+    assert.equal(pkgRes.data.result.partsAdded, 1);
+    assert.equal(pkgRes.data.parts.length, 61);
+    assert.ok(
+      pkgRes.data.systemStatus.updateHistory.some(
+        (h) => h.id === 'patch-2026-11-28-pedals',
+      ),
+    );
+  } finally {
+    await ctx.close();
   }
 });

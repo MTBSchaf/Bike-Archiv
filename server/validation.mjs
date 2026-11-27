@@ -5,12 +5,22 @@ export const PART_CATEGORIES = [
   'Bremsen',
   'Laufräder & Reifen',
   'Cockpit & Sattel',
+  'Lager & Achsen',
+  'Schrauben & Kleinteile',
   'Sonstiges',
 ];
 
 export const PART_STATUSES = ['in_use', 'in_stock', 'defective'];
 export const ORDER_PRIORITIES = ['low', 'normal', 'high'];
 export const ORDER_STATUSES = ['open', 'ordered', 'received'];
+
+const ALLOWED_UPLOAD_MIMES = new Map([
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
+]);
+
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
 
 export class ValidationError extends Error {
   constructor(message) {
@@ -112,8 +122,8 @@ function cleanQuantity(value) {
   return num;
 }
 
-function cleanHttpUrl(value) {
-  const str = cleanString(value, 'Shop-URL', { required: false, maxLength: 1000 });
+function cleanOptionalHttpUrl(value, fieldLabel) {
+  const str = cleanString(value, fieldLabel, { required: false, maxLength: 1000 });
   if (!str) {
     return '';
   }
@@ -121,12 +131,115 @@ function cleanHttpUrl(value) {
   try {
     parsed = new URL(str);
   } catch {
-    throw new ValidationError('Shop-URL muss eine gültige URL sein.');
+    throw new ValidationError(`${fieldLabel} muss eine gültige URL sein.`);
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new ValidationError('Shop-URL darf nur http:// oder https:// verwenden.');
+    throw new ValidationError(`${fieldLabel} darf nur http:// oder https:// verwenden.`);
   }
   return parsed.toString();
+}
+
+function cleanHttpUrl(value) {
+  return cleanOptionalHttpUrl(value, 'Shop-URL');
+}
+
+function cleanImageUrl(value) {
+  const str = cleanString(value, 'Bild-URL', { required: false, maxLength: 1000 });
+  if (!str) {
+    return '';
+  }
+  if (/^\/(images|uploads)\/[a-zA-Z0-9._/-]+$/.test(str) && !str.includes('..')) {
+    return str;
+  }
+  let parsed;
+  try {
+    parsed = new URL(str);
+  } catch {
+    throw new ValidationError('Bild-URL muss ein gültiger lokaler Bildpfad oder eine http(s)-URL sein.');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new ValidationError('Bild-URL darf nur /images/, /uploads/, http:// oder https:// verwenden.');
+  }
+  return parsed.toString();
+}
+
+function cleanStructuredSpecs(value) {
+  if (value === undefined || value === null || value === '') {
+    return [];
+  }
+  let list = value;
+  if (typeof value === 'string') {
+    try {
+      list = JSON.parse(value);
+    } catch {
+      throw new ValidationError('Strukturierte Spezifikationen müssen als gültiges JSON-Array übergeben werden.');
+    }
+  }
+  if (!Array.isArray(list)) {
+    throw new ValidationError('Strukturierte Spezifikationen müssen als Liste übergeben werden.');
+  }
+  if (list.length > 30) {
+    throw new ValidationError('Maximal 30 strukturierte Spezifikationen pro Teil erlaubt.');
+  }
+  const result = [];
+  for (const entry of list) {
+    assertObject(entry);
+    const label = cleanString(entry.label, 'Eigenschaft', { required: false, maxLength: 120 });
+    const val = cleanString(entry.value, 'Wert', { required: false, maxLength: 300 });
+    if (!label && !val) {
+      continue;
+    }
+    if (!label || !val) {
+      throw new ValidationError('Jede strukturierte Spezifikation benötigt Eigenschaft und Wert.');
+    }
+    result.push({ label, value: val });
+  }
+  return result;
+}
+
+export function validateUploadPayload(body) {
+  assertObject(body);
+  const mimeType = cleanString(body.mimeType, 'MIME-Typ', { required: true, maxLength: 60 }).toLowerCase();
+  const ext = ALLOWED_UPLOAD_MIMES.get(mimeType);
+  if (!ext) {
+    throw new ValidationError('Es sind nur Bilddateien im Format JPEG, PNG oder WebP erlaubt.');
+  }
+  const rawBase64 = cleanString(body.dataBase64, 'Bilddaten', { required: true, maxLength: 5 * 1024 * 1024 });
+  const cleanedBase64 = rawBase64.replace(/^data:[^;]+;base64,/, '').replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/=]+$/.test(cleanedBase64)) {
+    throw new ValidationError('Ungültige Base64-Bilddaten.');
+  }
+  const buffer = Buffer.from(cleanedBase64, 'base64');
+  if (buffer.length === 0 || buffer.length > MAX_UPLOAD_BYTES) {
+    throw new ValidationError('Bilddatei darf maximal 3 MB groß sein.');
+  }
+
+  let magicValid = false;
+  if (mimeType === 'image/jpeg') {
+    magicValid = buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  } else if (mimeType === 'image/png') {
+    magicValid =
+      buffer.length >= 8 &&
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47 &&
+      buffer[4] === 0x0d &&
+      buffer[5] === 0x0a &&
+      buffer[6] === 0x1a &&
+      buffer[7] === 0x0a;
+  } else if (mimeType === 'image/webp') {
+    magicValid =
+      buffer.length >= 12 &&
+      buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+  }
+
+  if (!magicValid) {
+    throw new ValidationError('Die Bilddatei entspricht nicht dem angegebenen Dateiformat.');
+  }
+
+  return { buffer, ext, mimeType };
 }
 
 function assertEnum(value, allowed, fieldLabel, defaultValue) {
@@ -193,6 +306,11 @@ export function validateBikeInput(body) {
       'Rahmennummer',
       { required: false, maxLength: 160 },
     ),
+    imageUrl: cleanImageUrl(body.imageUrl ?? body.image_url),
+    manufacturerUrl: cleanOptionalHttpUrl(
+      body.manufacturerUrl ?? body.manufacturer_url,
+      'Herstellerseite',
+    ),
     notes: cleanString(body.notes, 'Notizen', { required: false, maxLength: 2000 }),
     serials,
   };
@@ -215,7 +333,29 @@ export function validatePartInput(body) {
     name: cleanString(body.name, 'Teilebezeichnung', { required: true, maxLength: 200 }),
     brand: cleanString(body.brand, 'Hersteller', { required: false, maxLength: 120 }),
     category: assertEnum(body.category, PART_CATEGORIES, 'Kategorie', 'Sonstiges'),
+    subCategory: cleanString(
+      body.subCategory ?? body.sub_category,
+      'Unterkategorie',
+      { required: false, maxLength: 120 },
+    ),
+    partNumber: cleanString(
+      body.partNumber ?? body.part_number,
+      'Teilenummer',
+      { required: false, maxLength: 120 },
+    ),
+    quantity: cleanQuantity(body.quantity),
     specs: cleanString(body.specs, 'Spezifikation', { required: false, maxLength: 500 }),
+    structuredSpecs: cleanStructuredSpecs(body.structuredSpecs ?? body.structured_specs),
+    manufacturerUrl: cleanOptionalHttpUrl(
+      body.manufacturerUrl ?? body.manufacturer_url,
+      'Herstellerseite',
+    ),
+    imageUrl: cleanImageUrl(body.imageUrl ?? body.image_url),
+    catalogKey: cleanString(
+      body.catalogKey ?? body.catalog_key,
+      'Katalog-Schlüssel',
+      { required: false, maxLength: 120 },
+    ),
     serialNumber: cleanString(
       body.serialNumber ?? body.serial_number,
       'Seriennummer',
@@ -239,6 +379,7 @@ export function validateOrderItemInput(body) {
     priority: assertEnum(body.priority, ORDER_PRIORITIES, 'Priorität', 'normal'),
     estimatedPrice: cleanOptionalPrice(body.estimatedPrice ?? body.estimated_price),
     shopUrl: cleanHttpUrl(body.shopUrl ?? body.shop_url),
+    imageUrl: cleanImageUrl(body.imageUrl ?? body.image_url),
     status: assertEnum(body.status, ORDER_STATUSES, 'Bestellstatus', 'open'),
     notes: cleanString(body.notes, 'Notizen', { required: false, maxLength: 2000 }),
   };
@@ -372,4 +513,102 @@ export function validateBackupPayload(raw) {
   });
 
   return { bikes, parts, orderItems };
+}
+
+export function validateUpdatePackagePayload(raw) {
+  assertObject(raw);
+  const updateId = cleanString(raw.updateId ?? raw.id, 'Update-ID', {
+    required: true,
+    maxLength: 120,
+  });
+  const version = cleanString(raw.version, 'Version', {
+    required: true,
+    maxLength: 40,
+  });
+  const description = cleanString(raw.description, 'Beschreibung', {
+    required: false,
+    maxLength: 500,
+  });
+
+  const rawBikes = raw.bikes === undefined ? [] : raw.bikes;
+  const rawParts = raw.parts === undefined ? [] : raw.parts;
+  const rawOrderItems = raw.orderItems === undefined ? [] : raw.orderItems;
+
+  if (!Array.isArray(rawBikes) || !Array.isArray(rawParts) || !Array.isArray(rawOrderItems)) {
+    throw new ValidationError(
+      'Update-Paket muss für „bikes“, „parts“ und „orderItems“ gültige Listen verwenden.',
+    );
+  }
+  if (rawBikes.length === 0 && rawParts.length === 0 && rawOrderItems.length === 0) {
+    throw new ValidationError('Update-Paket enthält keine zu aktualisierenden Einträge.');
+  }
+  if (rawBikes.length > 500 || rawParts.length > 5000 || rawOrderItems.length > 2000) {
+    throw new ValidationError('Update-Paket überschreitet die zulässige Maximalgröße.');
+  }
+
+  const fallbackNow = new Date().toISOString();
+  const bikes = rawBikes.map((entry) => {
+    assertObject(entry);
+    const id = cleanRequiredId(entry.id, 'Fahrrad-ID');
+    const validatedBike = validateBikeInput(entry);
+    const rawSerials = Array.isArray(entry.serials) ? entry.serials : [];
+    const serials = rawSerials.map((serialEntry) => {
+      assertObject(serialEntry);
+      const serialId = cleanRequiredId(serialEntry.id, 'Seriennummern-ID');
+      const validatedSerial = validateBikeSerialInput(serialEntry);
+      return {
+        id: serialId,
+        bikeId: id,
+        label: validatedSerial.label,
+        serialNumber: validatedSerial.serialNumber,
+        notes: validatedSerial.notes,
+        createdAt: cleanTimestamp(serialEntry.createdAt ?? serialEntry.created_at, fallbackNow),
+      };
+    });
+    return {
+      ...validatedBike,
+      id,
+      serials,
+      createdAt: cleanTimestamp(entry.createdAt ?? entry.created_at, fallbackNow),
+      updatedAt: cleanTimestamp(entry.updatedAt ?? entry.updated_at, fallbackNow),
+    };
+  });
+
+  const parts = rawParts.map((entry) => {
+    assertObject(entry);
+    const id = cleanOptionalId(entry.id, 'Teile-ID');
+    const validatedPart = validatePartInput(entry);
+    if (!id && !validatedPart.catalogKey) {
+      throw new ValidationError(
+        `Teil „${validatedPart.name}“ im Update-Paket benötigt eine ID oder einen catalogKey.`,
+      );
+    }
+    return {
+      ...validatedPart,
+      id: id || validatedPart.catalogKey,
+      createdAt: cleanTimestamp(entry.createdAt ?? entry.created_at, fallbackNow),
+      updatedAt: cleanTimestamp(entry.updatedAt ?? entry.updated_at, fallbackNow),
+    };
+  });
+
+  const orderItems = rawOrderItems.map((entry) => {
+    assertObject(entry);
+    const id = cleanRequiredId(entry.id, 'Bestell-ID');
+    const validatedOrder = validateOrderItemInput(entry);
+    return {
+      ...validatedOrder,
+      id,
+      createdAt: cleanTimestamp(entry.createdAt ?? entry.created_at, fallbackNow),
+      updatedAt: cleanTimestamp(entry.updatedAt ?? entry.updated_at, fallbackNow),
+    };
+  });
+
+  return {
+    updateId,
+    version,
+    description,
+    bikes,
+    parts,
+    orderItems,
+  };
 }

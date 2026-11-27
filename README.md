@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/MTBSchaf/Bike-Archiv/actions/workflows/ci.yml/badge.svg)](https://github.com/MTBSchaf/Bike-Archiv/actions/workflows/ci.yml)
 
-Webanwendung zur Verwaltung von Fahrrädern mit Seriennummern, Fahrradteilen mit Statusverwaltung (`in Verwendung`, `im Lager`, `defekt`) und Bike-Zuordnung sowie einer Bestellliste mit Übernahme ins Lager. Als initialer Datensatz ist das Specialized Status 160 mit 21 verbauten Komponenten hinterlegt.
+Webanwendung zur Verwaltung von Fahrrädern mit Seriennummern, Fahrradteilen mit Statusverwaltung (`in Verwendung`, `im Lager`, `defekt`), Produktbildern, strukturierten Herstellerangaben sowie einer Bestellliste mit Übernahme ins Lager. Als initialer Datensatz ist das Specialized Status 160 vollständig mit 60 verbauten Einzelkomponenten (vom Rahmen, Fahrwerk und Antrieb bis zu Lagern, Steckachsen und Schraubensätzen) hinterlegt.
 
-Bike Archiv läuft vollständig serverbasiert mit einem Node.js-HTTP-Server und zentraler SQLite-Datenbank (`node:sqlite`).
+Bike Archiv läuft vollständig serverbasiert mit einem Node.js-HTTP-Server und zentraler SQLite-Datenbank (`node:sqlite`), automatischem Schema- & Katalog-Update-System sowie umschaltbarem Dark- und White-Mode.
 
 ## Proxmox VE Installation (Ein Befehl)
 
@@ -37,10 +37,19 @@ Unterstützte Flags: `--ram`, `--cores`, `--ctid`, `--hostname`, `--disk`, `--po
 ### Container-Daten & Wartung
 
 - **SQLite-Datenbank im Container:** `/var/lib/bike-archiv/bike-archiv.sqlite`
+- **Hochgeladene Bilder im Container:** `/var/lib/bike-archiv/uploads`
 - **Konfiguration im Container:** `/etc/bike-archiv/bike-archiv.env`
 - **Status prüfen:** `pct exec <CTID> -- systemctl status bike-archiv`
 - **Logs ansehen:** `pct exec <CTID> -- journalctl -u bike-archiv -f`
-- **Update einspielen:** `pct exec <CTID> -- bike-archiv-update`
+- **Update einspielen (inkl. Vorab-Backup & Rollback-Schutz):** `pct exec <CTID> -- bike-archiv-update`
+- **Update nur prüfen:** `pct exec <CTID> -- bike-archiv-update --check`
+
+## Update-System
+
+Alle künftigen Änderungen (Code, Datenbank-Schema, Komponenten-Katalog und Produktbilder) lassen sich unter Erhalt aller Nutzerdaten als Update einspielen:
+
+- **Proxmox / Server-CLI:** `bike-archiv-update` bzw. `./deploy/proxmox/update.sh` erstellt vorab ein SQLite-Backup, zieht den aktuellen Stand per Git, baut neu, startet den Dienst und rollt bei Fehlern automatisch zurück.
+- **Weboberfläche (Update-Center):** Über den Button **Updates** im Header lassen sich verfügbare Git-Updates prüfen, der interne Hersteller-Katalog synchronisieren sowie inkrementelle `.json`-Update-Pakete ohne Überschreiben eigener Seriennummern oder Notizen einspielen.
 
 ## Direkter Server-Betrieb (Node.js)
 
