@@ -6,11 +6,11 @@ import { BikeDetailView } from './components/BikeDetailView';
 import { BikeModal } from './components/BikeModal';
 import { BikesView } from './components/BikesView';
 import { ConfirmModal } from './components/ConfirmModal';
-import { Header } from './components/Header';
 import { OrderListView } from './components/OrderListView';
 import { OrderModal } from './components/OrderModal';
 import { PartModal } from './components/PartModal';
 import { PartsView } from './components/PartsView';
+import { Sidebar } from './components/Sidebar';
 import { Toast } from './components/Toast';
 import { UpdateModal } from './components/UpdateModal';
 import { applyTheme, getInitialTheme } from './theme';
@@ -137,11 +137,7 @@ export default function App() {
 
   function handleSelectTab(tab: TabKey) {
     setActiveTab(tab);
-    if (tab !== 'bikes') {
-      setSelectedBikeId(null);
-    } else if (selectedBikeId && !bikes.some((b) => b.id === selectedBikeId)) {
-      setSelectedBikeId(null);
-    }
+    setSelectedBikeId(null);
   }
 
   function handleSelectBike(bikeId: string) {
@@ -405,7 +401,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Header
+      <Sidebar
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
         counts={{
