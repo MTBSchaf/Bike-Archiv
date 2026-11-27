@@ -3,7 +3,7 @@
 ## Projektüberblick & Tech-Stack
 - **Frontend (`src/`):** React 19, TypeScript, Vite (wird in `dist/` gebaut und durch den Node.js-Server ausgeliefert; Entwicklung mit Vite-Proxy auf `/api`).
 - **Backend (`server/`):** Zero-dependency Node.js (>= 22.5.0) HTTP-Server mit `node:sqlite` (`server/index.mjs`, `server/app.mjs`, `server/db.mjs`, `server/seed.mjs`, `server/validation.mjs`).
-- **Proxmox-Deployment (`deploy/proxmox/`):** Eigenständiges Ein-Befehl-Installationsskript `deploy/proxmox/install.sh` zur Einrichtung eines Debian-12-LXC-Containers mit interaktiver Abfrage von RAM und CPU-Kernen.
+- **Proxmox-Deployment (`deploy/proxmox/`):** Eigenständiges Ein-Befehl-Installationsskript `deploy/proxmox/install.sh` zur Einrichtung eines Debian-12-LXC-Containers mit interaktiver Abfrage von RAM, CPU-Kernen und Festplattengröße (restliche Container-Einstellungen automatisch).
 - **Tests (`tests/`):** Node Test Runner (`node --test tests/api.test.mjs tests/proxmox-installer.test.mjs`).
 
 ## Server-Only-Architektur & Konsistenz

@@ -14,20 +14,22 @@ Auf dem Proxmox-VE-Host (in der Root-Shell) genügt ein einzelner Befehl, um ein
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/MTBSchaf/Bike-Archiv/main/deploy/proxmox/install.sh)"
 ```
 
-Während der Installation fragt das Skript die gewünschten Ressourcen interaktiv ab und übernimmt sie direkt in die Container-Konfiguration:
+Während der Installation fragt das Skript **nur** noch die drei gewünschten Ressourcen interaktiv ab:
 
 - **Arbeitsspeicher (RAM):** z. B. `1024`, `2048` oder `2G` (Standard: `1024` MB, mindestens `512` MB)
 - **CPU-Kerne (vCPUs):** z. B. `2` oder `4` (Standard: `2`, maximal verfügbare Host-Kerne)
-- **Container-Details:** CTID (Vorschlag nächste freie ID), Hostname (`bike-archiv`), Festplatte (`8` GB), Port (`3001`), Storage und Netzwerk (`dhcp` oder statische IPv4/CIDR + Gateway)
+- **Festplattengröße (GB):** z. B. `8`, `16` oder `16G` (Standard: `8` GB, mindestens `4` GB)
 
-Der Installer lädt bei Bedarf das Debian-12-Standard-Template, legt den Container mit den gewählten RAM- und CPU-Werten an, installiert Node.js 22 LTS, baut die Anwendung, richtet einen gehärteten `systemd`-Dienst (`bike-archiv.service`) ein und prüft `/api/health`.
+Alle weiteren Einstellungen (nächste freie CTID, Hostname `bike-archiv`, aktiver Proxmox-Storage, Netzwerk-Bridge mit DHCP, Port `3001`) werden automatisch ermittelt und übernommen.
+
+Der Installer lädt bei Bedarf das Debian-12-Standard-Template, legt den Container mit den gewählten RAM-, CPU- und Festplattenwerten an, installiert Node.js 22 LTS, baut die Anwendung, richtet einen gehärteten `systemd`-Dienst (`bike-archiv.service`) ein und prüft `/api/health`.
 
 ### CLI-Optionen & Dry-Run
 
-Alle Parameter lassen sich auch vorab per Flag übergeben (`--help` zeigt alle Optionen):
+Alle Parameter lassen sich bei Bedarf auch vorab per Flag überschreiben (`--help` zeigt alle Optionen):
 
 ```bash
-./deploy/proxmox/install.sh --ram 2G --cores 2 --dry-run
+./deploy/proxmox/install.sh --ram 2G --cores 2 --disk 16 --dry-run
 ```
 
 Unterstützte Flags: `--ram`, `--cores`, `--ctid`, `--hostname`, `--disk`, `--port`, `--storage`, `--template-storage`, `--bridge`, `--ip`, `--gateway`, `--repo`, `--branch`, `--yes`, `--dry-run`.

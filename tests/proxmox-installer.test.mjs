@@ -176,43 +176,46 @@ test('Proxmox-Installer besteht bash -n Syntaxprüfung und zeigt --help', () => 
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--ram/);
   assert.match(help.stdout, /--cores/);
+  assert.match(help.stdout, /--disk/);
   assert.match(help.stdout, /--dry-run/);
 });
 
-test('Proxmox-Installer fragt RAM und CPUs interaktiv ab und übergibt exakte Werte an pct create', () => {
+test('Proxmox-Installer fragt nur RAM, CPUs und Festplatte interaktiv ab und setzt den Rest automatisch', () => {
   const mock = createMockProxmoxEnv();
   try {
     const answers = [
       '2048', // RAM in MB
       '4',    // CPU-Kerne
-      '',     // CTID (Default 105)
-      '',     // Hostname (Default bike-archiv)
-      '',     // Disk (Default 8)
-      '',     // Port (Default 3001)
-      '',     // Rootfs-Storage (Default local-lvm)
-      '',     // Template-Storage (Default local)
-      '',     // Bridge (Default vmbr0)
-      '',     // IP (Default dhcp)
-      'j',    // Bestätigung
+      '16',   // Festplatte in GB
     ].join('\n') + '\n';
 
     const res = runInstaller([], { input: answers, binDir: mock.binDir });
     assert.equal(res.status, 0, res.stderr);
 
+    assert.doesNotMatch(res.stdout, /Container-ID \(CTID\) \[/);
+    assert.doesNotMatch(res.stdout, /Hostname \[/);
+    assert.doesNotMatch(res.stdout, /Server-Port \[/);
+    assert.doesNotMatch(res.stdout, /Rootfs-Storage \[/);
+    assert.doesNotMatch(res.stdout, /Template-Storage \[/);
+    assert.doesNotMatch(res.stdout, /Netzwerk-Bridge \[/);
+    assert.doesNotMatch(res.stdout, /IP-Konfiguration/);
+    assert.doesNotMatch(res.stdout, /Installation mit diesen Einstellungen starten/);
+
     const log = fs.readFileSync(mock.logFile, 'utf8');
     assert.match(
       log,
-      /pct create 105 local:vztmpl\/debian-12-standard_12\.7-1_(amd64|arm64)\.tar\.zst --hostname bike-archiv --cores 4 --memory 2048 --swap 512 --rootfs local-lvm:8 --net0 name=eth0,bridge=vmbr0,ip=dhcp,type=veth --ostype debian --unprivileged 1 --features nesting=1 --onboot 1 --start 1/,
+      /pct create 105 local:vztmpl\/debian-12-standard_12\.7-1_(amd64|arm64)\.tar\.zst --hostname bike-archiv --cores 4 --memory 2048 --swap 512 --rootfs local-lvm:16 --net0 name=eth0,bridge=vmbr0,ip=dhcp,type=veth --ostype debian --unprivileged 1 --features nesting=1 --onboot 1 --start 1/,
     );
     assert.match(log, /pct exec 105 -- bash -euo pipefail/);
     assert.match(res.stdout, /Zugewiesener RAM:\s+2048 MB/);
     assert.match(res.stdout, /Zugewiesene CPUs:\s+4 Kerne/);
+    assert.match(res.stdout, /Festplatte:\s+16 GB/);
   } finally {
     mock.cleanup();
   }
 });
 
-test('Proxmox-Installer akzeptiert GB-Notation (3G -> 3072 MB) und wiederholt bei ungültigen Eingaben', () => {
+test('Proxmox-Installer akzeptiert GB-Notation (3G, 12G) und wiederholt bei ungültigen Eingaben', () => {
   const mock = createMockProxmoxEnv();
   try {
     const answers = [
@@ -222,15 +225,9 @@ test('Proxmox-Installer akzeptiert GB-Notation (3G -> 3072 MB) und wiederholt be
       '0',    // ungültige CPU-Anzahl
       '99',   // mehr als Host-CPUs (8)
       '2',    // gültig -> 2 Kerne
-      '106',  // CTID
-      'bike-box', // Hostname
-      '12',   // Disk GB
-      '3005', // Port
-      'local-zfs', // Rootfs
-      'local',     // Template
-      'vmbr0',     // Bridge
-      'dhcp',      // IP
-      'y',         // Bestätigung
+      'abc',  // ungültige Festplattengröße
+      '2',    // zu klein (< 4 GB)
+      '12G',  // gültig -> 12 GB
     ].join('\n') + '\n';
 
     const res = runInstaller([], {
@@ -243,43 +240,45 @@ test('Proxmox-Installer akzeptiert GB-Notation (3G -> 3072 MB) und wiederholt be
     assert.match(res.stderr, /Mindestens 512 MB RAM/);
     assert.match(res.stderr, /Mindestens 1 CPU-Kern/);
     assert.match(res.stderr, /Maximal 8 CPU-Kerne/);
+    assert.match(res.stderr, /Festplattengröße muss/);
 
     const log = fs.readFileSync(mock.logFile, 'utf8');
     assert.match(log, /pveam download local debian-12-standard_12\.7-1_(amd64|arm64)\.tar\.zst/);
     assert.match(
       log,
-      /pct create 106 .* --hostname bike-box --cores 2 --memory 3072 --swap 512 --rootfs local-zfs:12/,
+      /pct create 105 .* --hostname bike-archiv --cores 2 --memory 3072 --swap 512 --rootfs local-lvm:12/,
     );
   } finally {
     mock.cleanup();
   }
 });
 
-test('Proxmox-Installer übernimmt statische IP und Gateway korrekt in net0', () => {
+test('Proxmox-Installer übernimmt optionale CLI-Overrides für automatische Parameter', () => {
   const mock = createMockProxmoxEnv();
   try {
     const answers = [
       '1024',
       '2',
-      '110',
-      'bike-archiv',
-      '8',
-      '3001',
-      'local-lvm',
-      'local',
-      'vmbr0',
-      '192.168.10.50/24',
-      '192.168.10.1',
-      'j',
+      '10',
     ].join('\n') + '\n';
 
-    const res = runInstaller([], { input: answers, binDir: mock.binDir });
+    const res = runInstaller(
+      [
+        '--ctid', '110',
+        '--hostname', 'bike-box',
+        '--storage', 'local-zfs',
+        '--port', '3005',
+        '--ip', '192.168.10.50/24',
+        '--gateway', '192.168.10.1',
+      ],
+      { input: answers, binDir: mock.binDir },
+    );
     assert.equal(res.status, 0, res.stderr);
 
     const log = fs.readFileSync(mock.logFile, 'utf8');
     assert.match(
       log,
-      /--net0 name=eth0,bridge=vmbr0,ip=192\.168\.10\.50\/24,gw=192\.168\.10\.1,type=veth/,
+      /pct create 110 .* --hostname bike-box --cores 2 --memory 1024 --swap 512 --rootfs local-zfs:10 --net0 name=eth0,bridge=vmbr0,ip=192\.168\.10\.50\/24,gw=192\.168\.10\.1,type=veth/,
     );
   } finally {
     mock.cleanup();
@@ -290,11 +289,12 @@ test('Proxmox-Installer unterstützt --dry-run und --yes ohne Container anzulege
   const mock = createMockProxmoxEnv();
   try {
     const res = runInstaller(
-      ['--ram', '4G', '--cores', '3', '--ctid', '210', '--yes', '--dry-run'],
+      ['--ram', '4G', '--cores', '3', '--disk', '20', '--ctid', '210', '--yes', '--dry-run'],
       { binDir: mock.binDir },
     );
     assert.equal(res.status, 0, res.stderr);
     assert.match(res.stdout, /--cores 3 --memory 4096/);
+    assert.match(res.stdout, /--rootfs local-lvm:20/);
     assert.match(res.stdout, /Dry-Run aktiv/);
 
     const log = fs.existsSync(mock.logFile) ? fs.readFileSync(mock.logFile, 'utf8') : '';

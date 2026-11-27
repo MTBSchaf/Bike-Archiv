@@ -60,6 +60,11 @@ usage() {
   cat <<'EOF'
 Bike Archiv - Proxmox VE LXC Installer
 
+Interaktiv werden ausschließlich Arbeitsspeicher (RAM), CPU-Kerne und
+Festplattengröße abgefragt. Alle weiteren Container-Einstellungen (CTID,
+Hostname, Storage, Netzwerk/DHCP, Port) werden automatisch ermittelt und
+können bei Bedarf über die folgenden Optionen überschrieben werden.
+
 Verwendung:
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/MTBSchaf/Bike-Archiv/main/deploy/proxmox/install.sh)"
   ./deploy/proxmox/install.sh [OPTIONEN]
@@ -67,9 +72,9 @@ Verwendung:
 Optionen:
   --ram <WERT>               Arbeitsspeicher für den Container (z. B. 1024, 2048, 2G)
   --cores <ANZAHL>           Anzahl CPU-Kerne (vCPUs) für den Container (z. B. 2)
+  --disk <GB>                Festplattengröße in GB (z. B. 8, 16G; Standard: 8)
   --ctid <ID>                Container-ID (CTID, z. B. 105)
   --hostname <NAME>          Hostname des Containers (Standard: bike-archiv)
-  --disk <GB>                Festplattengröße in GB (Standard: 8)
   --port <PORT>              HTTP-Port von Bike Archiv (Standard: 3001)
   --storage <STORAGE>        Proxmox-Storage für Rootfs (z. B. local-lvm)
   --template-storage <NAME>  Proxmox-Storage für LXC-Templates (z. B. local)
@@ -249,6 +254,11 @@ detect_host_resources() {
   NEXT_CTID="$(pvesh get /cluster/nextid 2>/dev/null | tr -dc '0-9' || true)"
   if [ -z "$NEXT_CTID" ]; then
     NEXT_CTID="100"
+    local ctid_attempts=0
+    while pct status "$NEXT_CTID" >/dev/null 2>&1 && [ "$ctid_attempts" -lt 1000 ]; do
+      NEXT_CTID=$((NEXT_CTID + 1))
+      ctid_attempts=$((ctid_attempts + 1))
+    done
   fi
 
   DETECTED_BRIDGE=""
@@ -386,11 +396,13 @@ validate_hostname() {
 
 validate_disk_gb() {
   local raw
-  raw="$(trim "$1")"
-  if ! printf '%s' "$raw" | grep -Eq '^[0-9]+$'; then
-    err "Festplattengröße muss eine Ganzzahl in GB sein (z. B. 8)."
+  raw="$(to_upper "$(trim "$1")")"
+  if ! printf '%s' "$raw" | grep -Eq '^[0-9]+(G|GB)?$'; then
+    err "Festplattengröße muss eine Ganzzahl in GB sein (z. B. 8 oder 16G)."
     return 1
   fi
+  raw="${raw%B}"
+  raw="${raw%G}"
   local disk="$((10#$raw))"
   if [ "$disk" -lt 4 ] || [ "$disk" -gt 2048 ]; then
     err "Festplattengröße muss zwischen 4 und 2048 GB liegen."
@@ -574,6 +586,19 @@ prompt_validated() {
   done
 }
 
+resolve_validated() {
+  local target_var="$1"
+  local default_val="$2"
+  local cli_val="$3"
+  local validator_fn="$4"
+
+  local val="${cli_val:-$default_val}"
+  if ! "$validator_fn" "$val"; then
+    exit 1
+  fi
+  printf -v "$target_var" '%s' "$VALIDATED_VALUE"
+}
+
 collect_configuration() {
   local default_cores="2"
   if [ -n "$HOST_CPU_CORES" ] && [ "$HOST_CPU_CORES" -lt 2 ]; then
@@ -591,43 +616,29 @@ collect_configuration() {
     printf 'Host-Ressourcen: %s CPU-Kerne | %s MB RAM\n' \
       "${HOST_CPU_CORES:-unbekannt}" "${HOST_RAM_MB:-unbekannt}"
   fi
-  if [ -n "$ROOTFS_STORAGES" ]; then
-    printf 'Verfügbare Container-Storages (rootdir): %s\n' "$ROOTFS_STORAGES"
-  fi
-  if [ -n "$TEMPLATE_STORAGES" ]; then
-    printf 'Verfügbare Template-Storages (vztmpl): %s\n' "$TEMPLATE_STORAGES"
-  fi
   printf '\n'
 
   prompt_validated RAM_MB "Arbeitsspeicher / RAM in MB (oder z. B. 2G)" "$DEFAULT_RAM_MB" "$CLI_RAM" validate_ram_mb
   prompt_validated CPU_CORES "Anzahl CPU-Kerne (vCPUs)" "$default_cores" "$CLI_CORES" validate_cores
-  prompt_validated CTID "Container-ID (CTID)" "$NEXT_CTID" "$CLI_CTID" validate_ctid
-  prompt_validated HOSTNAME "Hostname" "$DEFAULT_HOSTNAME" "$CLI_HOSTNAME" validate_hostname
-  prompt_validated DISK_GB "Festplattengröße in GB" "$DEFAULT_DISK_GB" "$CLI_DISK" validate_disk_gb
-  prompt_validated APP_PORT "Server-Port" "$DEFAULT_APP_PORT" "$CLI_PORT" validate_port
-  prompt_validated ROOTFS_STORAGE "Rootfs-Storage" "$default_rootfs" "$CLI_STORAGE" validate_rootfs_storage
-  prompt_validated TEMPLATE_STORAGE "Template-Storage" "$default_template_storage" "$CLI_TEMPLATE_STORAGE" validate_template_storage
-  prompt_validated BRIDGE "Netzwerk-Bridge" "$DETECTED_BRIDGE" "$CLI_BRIDGE" validate_bridge
-  prompt_validated IP_SPEC "IP-Konfiguration (dhcp oder CIDR z. B. 192.168.1.50/24)" "$DEFAULT_IP_SPEC" "$CLI_IP" validate_ip_spec
+  prompt_validated DISK_GB "Festplattengröße in GB (z. B. 8 oder 16G)" "$DEFAULT_DISK_GB" "$CLI_DISK" validate_disk_gb
+
+  resolve_validated CTID "$NEXT_CTID" "$CLI_CTID" validate_ctid
+  resolve_validated HOSTNAME "$DEFAULT_HOSTNAME" "$CLI_HOSTNAME" validate_hostname
+  resolve_validated APP_PORT "$DEFAULT_APP_PORT" "$CLI_PORT" validate_port
+  resolve_validated ROOTFS_STORAGE "$default_rootfs" "$CLI_STORAGE" validate_rootfs_storage
+  resolve_validated TEMPLATE_STORAGE "$default_template_storage" "$CLI_TEMPLATE_STORAGE" validate_template_storage
+  resolve_validated BRIDGE "$DETECTED_BRIDGE" "$CLI_BRIDGE" validate_bridge
+  resolve_validated IP_SPEC "$DEFAULT_IP_SPEC" "$CLI_IP" validate_ip_spec
 
   GATEWAY=""
   if [ "$IP_SPEC" != "dhcp" ]; then
     local default_gw="${IP_SPEC%/*}"
     default_gw="${default_gw%.*}.1"
-    prompt_validated GATEWAY "IPv4-Gateway" "$default_gw" "$CLI_GATEWAY" validate_gateway
+    resolve_validated GATEWAY "$default_gw" "$CLI_GATEWAY" validate_gateway
   fi
 
-  local repo_val="${CLI_REPO:-$DEFAULT_REPO_URL}"
-  if ! validate_repo_url "$repo_val"; then
-    exit 1
-  fi
-  REPO_URL="$VALIDATED_VALUE"
-
-  local branch_val="${CLI_BRANCH:-$DEFAULT_REPO_BRANCH}"
-  if ! validate_branch "$branch_val"; then
-    exit 1
-  fi
-  REPO_BRANCH="$VALIDATED_VALUE"
+  resolve_validated REPO_URL "$DEFAULT_REPO_URL" "$CLI_REPO" validate_repo_url
+  resolve_validated REPO_BRANCH "$DEFAULT_REPO_BRANCH" "$CLI_BRANCH" validate_branch
 
   if [ "$RAM_MB" -lt 512 ]; then
     SWAP_MB="$RAM_MB"
@@ -655,24 +666,6 @@ print_summary() {
   printf '  Bike-Archiv-Port:    %s\n' "$APP_PORT"
   printf '  Repository:          %s (%s)\n' "$REPO_URL" "$REPO_BRANCH"
   printf '%s\n' '------------------------------------------------------------'
-}
-
-confirm_installation() {
-  if [ "$ASSUME_YES" = "1" ]; then
-    return 0
-  fi
-  local confirm=""
-  read_input confirm "Installation mit diesen Einstellungen starten? [J/n]: "
-  confirm="$(to_lower "$(trim "$confirm")")"
-  case "$confirm" in
-    ""|"j"|"ja"|"y"|"yes")
-      return 0
-      ;;
-    *)
-      info "Installation abgebrochen."
-      exit 0
-      ;;
-  esac
 }
 
 resolve_debian_template() {
@@ -737,7 +730,7 @@ resolve_debian_template() {
 }
 
 create_and_start_container() {
-  info "Erstelle LXC-Container $CTID ($HOSTNAME) mit ${RAM_MB} MB RAM und ${CPU_CORES} CPU-Kernen..."
+  info "Erstelle LXC-Container $CTID ($HOSTNAME) mit ${RAM_MB} MB RAM, ${CPU_CORES} CPU-Kernen und ${DISK_GB} GB Festplatte..."
   pct create "$CTID" "${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE_NAME}" \
     --hostname "$HOSTNAME" \
     --cores "$CPU_CORES" \
@@ -919,6 +912,7 @@ print_completion_info() {
   printf '  Container-ID:     %s (%s)\n' "$CTID" "$HOSTNAME"
   printf '  Zugewiesener RAM: %s MB\n' "${cfg_mem:-$RAM_MB}"
   printf '  Zugewiesene CPUs: %s Kerne\n' "${cfg_cores:-$CPU_CORES}"
+  printf '  Festplatte:       %s GB (%s)\n' "$DISK_GB" "$ROOTFS_STORAGE"
   printf '  SQLite-Datenbank: /var/lib/bike-archiv/bike-archiv.sqlite (im CT)\n'
   if [ -n "$primary_ip" ]; then
     printf '  Weboberfläche:    http://%s:%s\n' "$primary_ip" "$APP_PORT"
@@ -939,7 +933,6 @@ main() {
   detect_host_resources
   collect_configuration
   print_summary
-  confirm_installation
 
   if [ "$DRY_RUN" = "1" ]; then
     info "Dry-Run aktiv. Es werden keine Änderungen vorgenommen."
