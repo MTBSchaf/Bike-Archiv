@@ -1,0 +1,26 @@
+name: Feature-Anfrage
+description: Eine neue Funktion oder Verbesserung für Bike Archiv vorschlagen
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Ziel / Nutzen
+      description: Welches Problem soll gelöst oder welcher Ablauf verbessert werden?
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Gewünschtes Verhalten
+      description: Wie soll die Funktion im Frontend und/oder Server funktionieren?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Akzeptanzkriterien
+      placeholder: |
+        - [ ] ...
+        - [ ] ...

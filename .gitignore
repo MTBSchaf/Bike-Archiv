@@ -7,3 +7,8 @@
 node_modules/
 dist/
 data/
+.DS_Store
+*.log
+coverage/
+.vscode/
+.idea/

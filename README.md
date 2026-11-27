@@ -1,5 +1,7 @@
 # Bike Archiv
 
+[![CI](https://github.com/MTBSchaf/Bike-Archiv/actions/workflows/ci.yml/badge.svg)](https://github.com/MTBSchaf/Bike-Archiv/actions/workflows/ci.yml)
+
 Webanwendung zur Verwaltung von Fahrrädern mit Seriennummern, Fahrradteilen mit Statusverwaltung (`in Verwendung`, `im Lager`, `defekt`) und Bike-Zuordnung sowie einer Bestellliste mit Übernahme ins Lager. Als initialer Datensatz ist das Specialized Status 160 mit 21 verbauten Komponenten hinterlegt.
 
 ## Statische Website (ohne Server — für File Manager & Webspace)
@@ -45,3 +47,10 @@ npm run dev
 npm run build
 npm test
 ```
+
+## Repository & Zusammenarbeit
+
+- [Mitwirkung & Setup-Anleitung](CONTRIBUTING.md)
+- [Sicherheitsrichtlinie](SECURITY.md)
+- [Arbeitsanweisungen für KI-Agenten](.github/copilot-instructions.md)
+- [CI-Workflow](.github/workflows/ci.yml)
