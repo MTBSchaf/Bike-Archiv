@@ -23,14 +23,15 @@ npm test
 
 ## Projektstruktur
 
-- `src/` — React-19-Frontend (TypeScript, Vite) inkl. `src/localStore.ts` für den serverlosen Browser-Betrieb
+- `src/` — React-19-Frontend (TypeScript, Vite) mit direkter API-Anbindung an `/api/*`
 - `server/` — Node.js-HTTP-Server und SQLite-Persistenz (`node:sqlite`)
-- `tests/` — Automatisierte API- und LocalStore-Tests (`node --test`)
+- `deploy/proxmox/` — Ein-Befehl-LXC-Installer (`install.sh`) für Proxmox VE
+- `tests/` — Automatisierte API- und Installer-Tests (`node --test`)
 - `.github/` — CI-Workflow (`workflows/ci.yml`), Vorlagen und Agenten-Leitfaden (`copilot-instructions.md`)
 
-## Dual-Mode-Konsistenz
+## Konsistenz zwischen Server und Frontend
 
-Bike Archiv läuft sowohl statisch im Browser (`localStorage`) als auch mit dem optionalen Node.js-Server (`SQLite`). Änderungen an Datenmodellen, Validierungen oder dem initialen Seed (`Specialized Status 160` mit 21 Teilen) müssen immer in beiden Schichten (`server/` und `src/`) konsistent umgesetzt und durch Tests abgedeckt werden.
+Änderungen an Datenmodellen, Validierungen (`server/validation.mjs` und `src/validation.ts`) oder API-Endpunkten (`server/app.mjs` und `src/api.ts`) müssen über alle betroffenen Schichten hinweg konsistent umgesetzt und durch Tests abgedeckt werden.
 
 ## Branches & Commits
 

@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createDatabase } from '../server/db.mjs';
 import { seedInitialData, SPECIALIZED_STATUS_160_ID } from '../server/seed.mjs';
 import { createAppServer } from '../server/app.mjs';
@@ -380,5 +383,39 @@ test('Backup-Import über POST /api/import ersetzt Bestand konsistent und validi
     assert.equal(bootstrap.data.bikes[0].id, 'bike-import-1');
   } finally {
     await ctx.close();
+  }
+});
+
+test('Static-File-Serving liefert Frontend per GET und HEAD aus', async () => {
+  const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), 'bike-archiv-dist-'));
+  fs.writeFileSync(
+    path.join(tmpDist, 'index.html'),
+    '<!doctype html><html><body>Bike Archiv</body></html>',
+    'utf8',
+  );
+
+  const db = createDatabase(':memory:');
+  seedInitialData(db);
+  const server = createAppServer({ db, distDir: tmpDist, serveStatic: true });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const getRes = await fetch(`${baseUrl}/`);
+    assert.equal(getRes.status, 200);
+    assert.match(getRes.headers.get('content-type') || '', /text\/html/);
+    const html = await getRes.text();
+    assert.match(html, /Bike Archiv/);
+
+    const headRes = await fetch(`${baseUrl}/`, { method: 'HEAD' });
+    assert.equal(headRes.status, 200);
+    assert.match(headRes.headers.get('content-type') || '', /text\/html/);
+    const headBody = await headRes.text();
+    assert.equal(headBody, '');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    db.close();
+    fs.rmSync(tmpDist, { recursive: true, force: true });
   }
 });

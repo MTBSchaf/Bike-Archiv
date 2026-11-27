@@ -98,7 +98,7 @@ function safeDecodeSegment(segment) {
   }
 }
 
-function serveStaticFile(distDir, reqPath, res) {
+function serveStaticFile(distDir, reqPath, method, res) {
   const resolvedDist = path.resolve(distDir);
   if (!fs.existsSync(resolvedDist)) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -141,6 +141,10 @@ function serveStaticFile(distDir, reqPath, res) {
     'Content-Type': mime,
     'Cache-Control': cacheControl,
   });
+  if (method === 'HEAD') {
+    res.end();
+    return;
+  }
   fs.createReadStream(candidate).pipe(res);
 }
 
@@ -398,7 +402,7 @@ export function createAppServer({ db, distDir = null, serveStatic = false }) {
       }
 
       if (serveStatic && distDir && (method === 'GET' || method === 'HEAD')) {
-        serveStaticFile(distDir, pathname, res);
+        serveStaticFile(distDir, pathname, method, res);
         return;
       }
 

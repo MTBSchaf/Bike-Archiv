@@ -1,6 +1,5 @@
 import { Download, Upload, X } from 'lucide-react';
 import { useState, type ChangeEvent } from 'react';
-import type { StorageMode } from '../api';
 import type { Bike, OrderItem, Part } from '../types';
 import { validateBackupPayload, type ValidatedBackupPayload } from '../validation';
 
@@ -10,7 +9,6 @@ interface BackupModalProps {
   bikes: Bike[];
   parts: Part[];
   orderItems: OrderItem[];
-  storageMode: StorageMode;
   onImport: (payload: unknown) => Promise<void>;
   onExportSuccess: () => void;
   onClose: () => void;
@@ -20,7 +18,6 @@ export function BackupModal({
   bikes,
   parts,
   orderItems,
-  storageMode,
   onImport,
   onExportSuccess,
   onClose,
@@ -125,7 +122,7 @@ export function BackupModal({
         <div className="backup-meta">
           <div>
             <span className="backup-meta-label">Speicherort</span>
-            <strong>{storageMode === 'server' ? 'Server-Datenbank' : 'Browser (lokal)'}</strong>
+            <strong>Server-Datenbank (SQLite)</strong>
           </div>
           <div>
             <span className="backup-meta-label">Aktueller Bestand</span>

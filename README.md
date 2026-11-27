@@ -4,45 +4,65 @@
 
 Webanwendung zur Verwaltung von Fahrrädern mit Seriennummern, Fahrradteilen mit Statusverwaltung (`in Verwendung`, `im Lager`, `defekt`) und Bike-Zuordnung sowie einer Bestellliste mit Übernahme ins Lager. Als initialer Datensatz ist das Specialized Status 160 mit 21 verbauten Komponenten hinterlegt.
 
-## Statische Website (ohne Server — für File Manager & Webspace)
+Bike Archiv läuft vollständig serverbasiert mit einem Node.js-HTTP-Server und zentraler SQLite-Datenbank (`node:sqlite`).
 
-Die fertige Website aus `bike-archiv-website.zip` (oder direkt aus dem Ordner `dist/`) benötigt **keinen Node.js-Server**:
+## Proxmox VE Installation (Ein Befehl)
 
-1. `bike-archiv-website.zip` entpacken und die Dateien (`index.html` und `assets/`) in einen beliebigen Ordner im File Manager (z. B. `public_html`, `htdocs`, GitHub Pages, Nginx/Apache oder ein lokaler Ordner) hochladen.
-2. Alternativ kann `index.html` auch direkt lokal im Browser geöffnet werden.
-3. Alle Änderungen werden automatisch lokal im Browser (`localStorage`) gespeichert. Über den Button **Backup** lassen sich jederzeit alle Daten als JSON-Datei exportieren und wieder importieren.
+Auf dem Proxmox-VE-Host (in der Root-Shell) genügt ein einzelner Befehl, um einen eigenen unprivilegierten Debian-12-LXC-Container einzurichten:
 
-## Wofür der optionale Node.js-Server gebraucht wird
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/MTBSchaf/Bike-Archiv/main/deploy/proxmox/install.sh)"
+```
 
-Ein Server wird nur benötigt, wenn die Daten **zentral** statt nur lokal in einem einzelnen Browser gespeichert werden sollen:
+Während der Installation fragt das Skript die gewünschten Ressourcen interaktiv ab und übernimmt sie direkt in die Container-Konfiguration:
 
-- **Geräteübergreifende Synchronisation:** Auf dem Smartphone, Tablet und PC automatisch denselben Stand sehen, ohne JSON-Backups hin- und herkopieren zu müssen.
-- **Zentrale SQLite-Datenbank:** Alle Daten liegen in einer festen Datenbankdatei auf dem Server (`data/bike-archiv.sqlite`) und gehen nicht verloren, wenn im Browser Cache oder Website-Daten gelöscht werden.
-- **Gemeinsame Nutzung:** Mehrere Personen oder Browser greifen auf denselben Bestand zu.
+- **Arbeitsspeicher (RAM):** z. B. `1024`, `2048` oder `2G` (Standard: `1024` MB, mindestens `512` MB)
+- **CPU-Kerne (vCPUs):** z. B. `2` oder `4` (Standard: `2`, maximal verfügbare Host-Kerne)
+- **Container-Details:** CTID (Vorschlag nächste freie ID), Hostname (`bike-archiv`), Festplatte (`8` GB), Port (`3001`), Storage und Netzwerk (`dhcp` oder statische IPv4/CIDR + Gateway)
 
-Die Anwendung erkennt beim Laden automatisch, ob ein Bike-Archiv-Server unter `/api/health` erreichbar ist, und wechselt andernfalls nahtlos in den lokalen Browser-Speicher.
+Der Installer lädt bei Bedarf das Debian-12-Standard-Template, legt den Container mit den gewählten RAM- und CPU-Werten an, installiert Node.js 22 LTS, baut die Anwendung, richtet einen gehärteten `systemd`-Dienst (`bike-archiv.service`) ein und prüft `/api/health`.
 
-## Optionaler Server-Betrieb
+### CLI-Optionen & Dry-Run
 
-- **Voraussetzung:** Node.js >= 22.5.0 (für `node:sqlite`; im Produktivbetrieb sind keine externen Laufzeit-Pakete erforderlich)
-- Server starten:
+Alle Parameter lassen sich auch vorab per Flag übergeben (`--help` zeigt alle Optionen):
+
+```bash
+./deploy/proxmox/install.sh --ram 2G --cores 2 --dry-run
+```
+
+Unterstützte Flags: `--ram`, `--cores`, `--ctid`, `--hostname`, `--disk`, `--port`, `--storage`, `--template-storage`, `--bridge`, `--ip`, `--gateway`, `--repo`, `--branch`, `--yes`, `--dry-run`.
+
+### Container-Daten & Wartung
+
+- **SQLite-Datenbank im Container:** `/var/lib/bike-archiv/bike-archiv.sqlite`
+- **Konfiguration im Container:** `/etc/bike-archiv/bike-archiv.env`
+- **Status prüfen:** `pct exec <CTID> -- systemctl status bike-archiv`
+- **Logs ansehen:** `pct exec <CTID> -- journalctl -u bike-archiv -f`
+- **Update einspielen:** `pct exec <CTID> -- bike-archiv-update`
+
+## Direkter Server-Betrieb (Node.js)
+
+- **Voraussetzung:** Node.js `>= 22.5.0` (für `node:sqlite`; im Produktivbetrieb sind keine externen Laufzeit-Pakete nötig)
+- Bauen und starten:
   ```bash
-  node server/index.mjs
+  npm ci
+  npm run build
+  npm start
   ```
-  Alternativ: `npm start`
 - Im Browser `http://127.0.0.1:3001` öffnen.
+- Über den Button **Backup** in der Oberfläche lassen sich jederzeit JSON-Backups exportieren und atomar über `POST /api/import` auf den Server einspielen.
 
-### Konfiguration (optional)
+### Umgebungsvariablen (optional)
 
 - `PORT`: Server-Port (Standard: `3001`)
-- `HOST`: Bind-Adresse (Standard: `127.0.0.1`)
+- `HOST`: Bind-Adresse (Standard: `127.0.0.1`, im LXC-Container `0.0.0.0`)
 - `DB_PATH`: Pfad zur SQLite-Datenbankdatei (Standard: `data/bike-archiv.sqlite`)
 - `SERVE_STATIC`: Auf `false` setzen, um das Ausliefern von `dist/` zu deaktivieren
 
-## Entwicklung & Tests (optional)
+## Entwicklung & Tests
 
 ```bash
-npm install
+npm ci
 npm run dev
 npm run build
 npm test

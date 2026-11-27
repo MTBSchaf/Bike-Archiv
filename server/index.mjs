@@ -9,6 +9,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
 const port = Number(process.env.PORT || 3001);
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  console.error('Ungültiger PORT-Wert. Erwartet wird eine Ganzzahl zwischen 1 und 65535.');
+  process.exit(1);
+}
 const host = process.env.HOST || '127.0.0.1';
 const dbPath = process.env.DB_PATH || path.join(rootDir, 'data', 'bike-archiv.sqlite');
 const distDir = path.join(rootDir, 'dist');

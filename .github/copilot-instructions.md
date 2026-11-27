@@ -1,21 +1,20 @@
 # Arbeitsanweisungen für KI-Agenten (Bike Archiv)
 
 ## Projektüberblick & Tech-Stack
-- **Frontend (`src/`):** React 19, TypeScript, Vite (statischer Build in `dist/` mit `base: './'` und IIFE-Bundle für File-Manager-/Webspace-Nutzung).
+- **Frontend (`src/`):** React 19, TypeScript, Vite (wird in `dist/` gebaut und durch den Node.js-Server ausgeliefert; Entwicklung mit Vite-Proxy auf `/api`).
 - **Backend (`server/`):** Zero-dependency Node.js (>= 22.5.0) HTTP-Server mit `node:sqlite` (`server/index.mjs`, `server/app.mjs`, `server/db.mjs`, `server/seed.mjs`, `server/validation.mjs`).
-- **Tests (`tests/`):** Node Test Runner (`node --test tests/api.test.mjs tests/local-store.test.mjs`).
+- **Proxmox-Deployment (`deploy/proxmox/`):** Eigenständiges Ein-Befehl-Installationsskript `deploy/proxmox/install.sh` zur Einrichtung eines Debian-12-LXC-Containers mit interaktiver Abfrage von RAM und CPU-Kernen.
+- **Tests (`tests/`):** Node Test Runner (`node --test tests/api.test.mjs tests/proxmox-installer.test.mjs`).
 
-## Dual-Mode-Architektur & Paritätspflicht
-- `src/api.ts` erkennt beim Start über `/api/health` (außer bei `file:`-Protokoll) automatisch, ob der Node.js-Server erreichbar ist, und wechselt andernfalls auf `src/localStore.ts` (`localStorage`-Key `bike-archiv:v1`).
-- Änderungen an Datenmodell, Validierungsregeln oder initialem Seed **immer konsistent** in beiden Schichten pflegen:
-  - Server: `server/db.mjs`, `server/app.mjs`, `server/seed.mjs`, `server/validation.mjs`
-  - Browser-Store: `src/localStore.ts`, `src/initialSeed.ts`, `src/validation.ts`, `src/api.ts`, `src/types.ts`
+## Server-Only-Architektur & Konsistenz
+- Das Frontend kommuniziert über `src/api.ts` direkt mit den REST-Endpunkten unter `/api/*`. Es existiert kein lokaler `localStorage`-Store mehr.
+- Änderungen an Datenmodell, Validierungsregeln oder Backup-Format in `server/` (`server/db.mjs`, `server/app.mjs`, `server/validation.mjs`) und den entsprechenden Typen/Validierungen im Frontend (`src/types.ts`, `src/validation.ts`, `src/api.ts`) konsistent halten.
 
 ## Fachliche Invarianten
 - **Initialer Seed:** Specialized Status 160 (`SPECIALIZED_STATUS_160_ID`) mit 21 verbauten Teilen (`status: 'in_use'`). Nach manuellem Löschen darf kein automatischer Re-Seed stattfinden.
 - **Teile-Status:** `in_use` erfordert eine gültige `bikeId`. Ein Statuswechsel auf `in_stock` oder `defective` setzt `bikeId` auf `null`.
 - **Bike-Löschung:** Beim Löschen eines Bikes werden alle dort verbauten Teile auf `in_stock` (`bikeId: null`) verschoben.
-- **Backup-Import:** `POST /api/import` und der Browser-Store ersetzen den Bestand nach vollständiger Validierung atomar.
+- **Backup-Import:** `POST /api/import` ersetzt den Bestand nach vollständiger Validierung atomar.
 
 ## Sicherheits- & Qualitätsregeln
 - SQL-Abfragen ausschließlich parametrisiert ausführen (`server/db.mjs`).

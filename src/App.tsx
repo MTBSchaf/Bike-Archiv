@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, type StorageMode } from './api';
+import { api } from './api';
 import { AssignPartModal } from './components/AssignPartModal';
 import { BackupModal } from './components/BackupModal';
 import { BikeDetailView } from './components/BikeDetailView';
@@ -31,7 +31,6 @@ export default function App() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [storageMode, setStorageMode] = useState<StorageMode>('local');
   const [backupModalOpen, setBackupModalOpen] = useState(false);
 
   const [bikeModalState, setBikeModalState] = useState<{
@@ -85,7 +84,6 @@ export default function App() {
       setBikes(data.bikes);
       setParts(data.parts);
       setOrderItems(data.orderItems);
-      setStorageMode(api.getStorageMode());
       setLoadError('');
     } catch (err) {
       setLoadError(
@@ -336,7 +334,6 @@ export default function App() {
     setBikes(data.bikes);
     setParts(data.parts);
     setOrderItems(data.orderItems);
-    setStorageMode(api.getStorageMode());
     if (selectedBikeId && !data.bikes.some((b) => b.id === selectedBikeId)) {
       setSelectedBikeId(null);
     }
@@ -497,7 +494,6 @@ export default function App() {
           bikes={bikes}
           parts={parts}
           orderItems={orderItems}
-          storageMode={storageMode}
           onImport={handleImportBackup}
           onExportSuccess={() => showToast('Backup heruntergeladen')}
           onClose={() => setBackupModalOpen(false)}
