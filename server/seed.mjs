@@ -1331,9 +1331,15 @@ export function applyCatalogUpdates(db, { force = false } = {}) {
         bikeUpdated = true;
       }
 
-      const existingBikeParts = db
-        .listParts()
-        .filter((part) => part.bikeId === SPECIALIZED_STATUS_160_ID);
+      const allParts = db.listParts();
+      const existingBikeParts = allParts.filter(
+        (part) => part.bikeId === SPECIALIZED_STATUS_160_ID,
+      );
+      const existingCatalogKeysElsewhere = new Set(
+        allParts
+          .filter((part) => part.bikeId !== SPECIALIZED_STATUS_160_ID && part.catalogKey)
+          .map((part) => part.catalogKey),
+      );
       const matchedPartIds = new Set();
 
       for (const spec of SPECIALIZED_STATUS_160_PARTS) {
@@ -1367,7 +1373,7 @@ export function applyCatalogUpdates(db, { force = false } = {}) {
             notes: match.notes,
           });
           partsUpdated += 1;
-        } else {
+        } else if (!existingCatalogKeysElsewhere.has(spec.catalogKey)) {
           db.createPart(buildPartPayload(spec));
           partsAdded += 1;
         }

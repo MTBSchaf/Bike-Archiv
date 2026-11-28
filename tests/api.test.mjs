@@ -679,3 +679,47 @@ test('System-Status und inkrementelles Update-Paket über /api/system/*', async 
     await ctx.close();
   }
 });
+
+test('applyCatalogUpdates dupliziert kein Teil, wenn der Nutzer es ins Lager (in_stock) verschoben hat', async () => {
+  const ctx = await startTestServer();
+  try {
+    const forkPart = ctx.db.listParts().find((p) => p.catalogKey === 'status160-fork');
+    assert.ok(forkPart);
+
+    const moveRes = await apiFetch(ctx.baseUrl, `/api/parts/${forkPart.id}`, {
+      method: 'PUT',
+      body: {
+        name: forkPart.name,
+        brand: forkPart.brand,
+        category: forkPart.category,
+        subCategory: forkPart.subCategory,
+        partNumber: forkPart.partNumber,
+        quantity: forkPart.quantity,
+        specs: forkPart.specs,
+        structuredSpecs: forkPart.structuredSpecs,
+        manufacturerUrl: forkPart.manufacturerUrl,
+        imageUrl: forkPart.imageUrl,
+        catalogKey: forkPart.catalogKey,
+        serialNumber: 'FOX-OWN-123',
+        status: 'in_stock',
+        bikeId: null,
+        notes: 'Ausgebaut und eingelagert',
+      },
+    });
+    assert.equal(moveRes.res.status, 200);
+
+    const syncRes = applyCatalogUpdates(ctx.db, { force: true });
+    assert.equal(syncRes.applied, true);
+    assert.equal(syncRes.partsAdded, 0);
+
+    const matchingForks = ctx.db
+      .listParts()
+      .filter((p) => p.catalogKey === 'status160-fork');
+    assert.equal(matchingForks.length, 1);
+    assert.equal(matchingForks[0].status, 'in_stock');
+    assert.equal(matchingForks[0].serialNumber, 'FOX-OWN-123');
+    assert.equal(matchingForks[0].notes, 'Ausgebaut und eingelagert');
+  } finally {
+    await ctx.close();
+  }
+});

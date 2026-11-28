@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "start": "node server/index.mjs",
     "update": "bash deploy/proxmox/update.sh",
-    "test": "node --test tests/api.test.mjs tests/proxmox-installer.test.mjs"
+    "check:repo": "node scripts/check-repo-hygiene.mjs",
+    "test": "node --test tests/api.test.mjs tests/proxmox-installer.test.mjs tests/repo-hygiene.test.mjs"
   },
   "engines": {
     "node": ">=22.5.0"

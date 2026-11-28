@@ -13,6 +13,7 @@ DEFAULT_DISK_GB="8"
 DEFAULT_APP_PORT="3001"
 DEFAULT_BRIDGE="vmbr0"
 DEFAULT_IP_SPEC="dhcp"
+DEFAULT_AUTO_UPDATE="*-*-* 04:00:00"
 
 CLI_RAM=""
 CLI_CORES=""
@@ -27,6 +28,7 @@ CLI_IP=""
 CLI_GATEWAY=""
 CLI_REPO=""
 CLI_BRANCH=""
+CLI_AUTO_UPDATE=""
 ASSUME_YES="0"
 DRY_RUN="0"
 
@@ -83,6 +85,7 @@ Optionen:
   --gateway <IPV4>           IPv4-Gateway (erforderlich bei statischer IP)
   --repo <HTTPS-URL>         Git-Repository-URL (Standard: https://github.com/MTBSchaf/Bike-Archiv.git)
   --branch <BRANCH>          Git-Branch (Standard: main)
+  --auto-update <PLAN|off>   Zeitplan für automatische Updates (Standard: *-*-* 04:00:00, oder off)
   --yes, --non-interactive   Ohne Rückfragen mit gesetzten Werten/Defaults installieren
   --dry-run                  Prüfungen und Abfragen ausführen, ohne Änderungen vorzunehmen
   -h, --help                 Diese Hilfe anzeigen
@@ -146,7 +149,7 @@ parse_args() {
         DRY_RUN="1"
         shift
         ;;
-      --ram=*|--cores=*|--ctid=*|--hostname=*|--disk=*|--port=*|--storage=*|--template-storage=*|--bridge=*|--ip=*|--gateway=*|--repo=*|--branch=*)
+      --ram=*|--cores=*|--ctid=*|--hostname=*|--disk=*|--port=*|--storage=*|--template-storage=*|--bridge=*|--ip=*|--gateway=*|--repo=*|--branch=*|--auto-update=*)
         val="${arg#*=}"
         case "${arg%%=*}" in
           --ram) CLI_RAM="$val" ;;
@@ -162,10 +165,11 @@ parse_args() {
           --gateway) CLI_GATEWAY="$val" ;;
           --repo) CLI_REPO="$val" ;;
           --branch) CLI_BRANCH="$val" ;;
+          --auto-update) CLI_AUTO_UPDATE="$val" ;;
         esac
         shift
         ;;
-      --ram|--cores|--ctid|--hostname|--disk|--port|--storage|--template-storage|--bridge|--ip|--gateway|--repo|--branch)
+      --ram|--cores|--ctid|--hostname|--disk|--port|--storage|--template-storage|--bridge|--ip|--gateway|--repo|--branch|--auto-update)
         if [ "$#" -lt 2 ]; then
           err "Option $arg erfordert einen Wert."
           exit 1
@@ -185,6 +189,7 @@ parse_args() {
           --gateway) CLI_GATEWAY="$val" ;;
           --repo) CLI_REPO="$val" ;;
           --branch) CLI_BRANCH="$val" ;;
+          --auto-update) CLI_AUTO_UPDATE="$val" ;;
         esac
         shift 2
         ;;
@@ -549,6 +554,21 @@ validate_branch() {
   return 0
 }
 
+validate_auto_update_schedule() {
+  local raw
+  raw="$(trim "$1")"
+  if [ "$(to_lower "$raw")" = "off" ] || [ "$(to_lower "$raw")" = "none" ]; then
+    VALIDATED_VALUE="off"
+    return 0
+  fi
+  if [ -z "$raw" ] || ! printf '%s' "$raw" | grep -Eq '^[a-zA-Z0-9:*.,/_ -]{1,64}$'; then
+    err "Ungültiger Auto-Update-Zeitplan '$raw' (Beispiel: '*-*-* 04:00:00', 'daily' oder 'off')."
+    return 1
+  fi
+  VALIDATED_VALUE="$raw"
+  return 0
+}
+
 prompt_validated() {
   local target_var="$1"
   local prompt_label="$2"
@@ -639,6 +659,7 @@ collect_configuration() {
 
   resolve_validated REPO_URL "$DEFAULT_REPO_URL" "$CLI_REPO" validate_repo_url
   resolve_validated REPO_BRANCH "$DEFAULT_REPO_BRANCH" "$CLI_BRANCH" validate_branch
+  resolve_validated AUTO_UPDATE_SCHEDULE "$DEFAULT_AUTO_UPDATE" "$CLI_AUTO_UPDATE" validate_auto_update_schedule
 
   if [ "$RAM_MB" -lt 512 ]; then
     SWAP_MB="$RAM_MB"
@@ -665,6 +686,7 @@ print_summary() {
   printf '  Netzwerk (net0):     %s\n' "$NET0_SPEC"
   printf '  Bike-Archiv-Port:    %s\n' "$APP_PORT"
   printf '  Repository:          %s (%s)\n' "$REPO_URL" "$REPO_BRANCH"
+  printf '  Auto-Update-Timer:   %s\n' "$AUTO_UPDATE_SCHEDULE"
   printf '%s\n' '------------------------------------------------------------'
 }
 
@@ -757,10 +779,11 @@ create_and_start_container() {
 
 provision_container() {
   info "Richte Bike Archiv im Container $CTID ein (Node.js 22, Build, systemd)..."
-  pct exec "$CTID" -- bash -euo pipefail -s -- "$REPO_URL" "$REPO_BRANCH" "$APP_PORT" <<'CONTAINER_EOF'
+  pct exec "$CTID" -- bash -euo pipefail -s -- "$REPO_URL" "$REPO_BRANCH" "$APP_PORT" "$AUTO_UPDATE_SCHEDULE" <<'CONTAINER_EOF'
 REPO_URL="$1"
 REPO_BRANCH="$2"
 APP_PORT="$3"
+AUTO_UPDATE_SCHEDULE="${4:-off}"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -818,6 +841,7 @@ chmod 640 /etc/bike-archiv/bike-archiv.env
 
 rm -rf /opt/bike-archiv
 git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" /opt/bike-archiv
+git config --system --add safe.directory /opt/bike-archiv
 cd /opt/bike-archiv
 npm ci
 npm run build
@@ -862,7 +886,7 @@ cd /opt/bike-archiv
 if [ -x /opt/bike-archiv/deploy/proxmox/update.sh ]; then
   exec /opt/bike-archiv/deploy/proxmox/update.sh "$@"
 fi
-git pull --ff-only
+git -c safe.directory=/opt/bike-archiv pull --ff-only
 npm ci
 npm run build
 npm prune --omit=dev
@@ -873,6 +897,10 @@ curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null
 echo "Bike Archiv erfolgreich aktualisiert."
 EOF
 chmod 755 /usr/local/bin/bike-archiv-update
+
+if [ "$AUTO_UPDATE_SCHEDULE" != "off" ]; then
+  /usr/local/bin/bike-archiv-update --enable-auto-update "$AUTO_UPDATE_SCHEDULE"
+fi
 
 systemctl daemon-reload
 systemctl enable --now bike-archiv.service
@@ -924,9 +952,11 @@ print_completion_info() {
     printf '  Weboberfläche:    Port %s (IP per "pct exec %s -- hostname -I" prüfen)\n' "$APP_PORT" "$CTID"
   fi
   printf '\nNützliche Befehle auf dem Proxmox-Host:\n'
-  printf '  Status:  pct exec %s -- systemctl status bike-archiv\n' "$CTID"
-  printf '  Logs:    pct exec %s -- journalctl -u bike-archiv -f\n' "$CTID"
-  printf '  Update:  pct exec %s -- bike-archiv-update\n' "$CTID"
+  printf '  Status:       pct exec %s -- systemctl status bike-archiv\n' "$CTID"
+  printf '  Logs:         pct exec %s -- journalctl -u bike-archiv -f\n' "$CTID"
+  printf '  Update:       pct exec %s -- bike-archiv-update\n' "$CTID"
+  printf '  Update-Check: pct exec %s -- bike-archiv-update --check\n' "$CTID"
+  printf '  Auto-Update:  %s (Status: pct exec %s -- bike-archiv-update --auto-update-status)\n' "$AUTO_UPDATE_SCHEDULE" "$CTID"
   printf '============================================================\n'
 }
 

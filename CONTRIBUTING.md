@@ -19,15 +19,22 @@ Für Build und Tests:
 ```bash
 npm run build
 npm test
+npm run check:repo
 ```
 
 ## Projektstruktur
 
 - `src/` — React-19-Frontend (TypeScript, Vite) mit direkter API-Anbindung an `/api/*`
 - `server/` — Node.js-HTTP-Server und SQLite-Persistenz (`node:sqlite`)
-- `deploy/proxmox/` — Ein-Befehl-LXC-Installer (`install.sh`) für Proxmox VE
-- `tests/` — Automatisierte API- und Installer-Tests (`node --test`)
+- `deploy/proxmox/` — LXC-Installer (`install.sh`), Container-Updater (`update.sh`) und Host-Updater (`proxmox-update.sh`)
+- `docs/` — Betriebsdokumentation (z. B. `PROXMOX-UPDATE.md`)
+- `scripts/` — Repository-Hygiene-Prüfung (`check-repo-hygiene.mjs`)
+- `tests/` — Automatisierte API-, Proxmox- und Hygiene-Tests (`node --test`)
 - `.github/` — CI-Workflow (`workflows/ci.yml`), Vorlagen und Agenten-Leitfaden (`copilot-instructions.md`)
+
+## Repository-Hygiene
+
+Im Repository darf ausschließlich das Server-Programm inklusive des ersten Beispiels (`Specialized Status 160` in `server/seed.mjs`) gespeichert werden. Vor jedem Push sicherstellen, dass `npm run check:repo` ohne Verstöße durchläuft.
 
 ## Konsistenz zwischen Server und Frontend
 

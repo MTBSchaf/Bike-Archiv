@@ -32,6 +32,9 @@ jobs:
       - name: Abhängigkeiten installieren
         run: npm ci
 
+      - name: Repository-Hygiene prüfen (nur Server-Programm & Beispiel)
+        run: npm run check:repo
+
       - name: TypeScript-Prüfung und Production-Build
         run: npm run build
 

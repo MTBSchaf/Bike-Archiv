@@ -32,24 +32,30 @@ Alle Parameter lassen sich bei Bedarf auch vorab per Flag überschreiben (`--hel
 ./deploy/proxmox/install.sh --ram 2G --cores 2 --disk 16 --dry-run
 ```
 
-Unterstützte Flags: `--ram`, `--cores`, `--ctid`, `--hostname`, `--disk`, `--port`, `--storage`, `--template-storage`, `--bridge`, `--ip`, `--gateway`, `--repo`, `--branch`, `--yes`, `--dry-run`.
+Unterstützte Flags: `--ram`, `--cores`, `--ctid`, `--hostname`, `--disk`, `--port`, `--storage`, `--template-storage`, `--bridge`, `--ip`, `--gateway`, `--repo`, `--branch`, `--auto-update`, `--yes`, `--dry-run`.
 
 ### Container-Daten & Wartung
 
 - **SQLite-Datenbank im Container:** `/var/lib/bike-archiv/bike-archiv.sqlite`
 - **Hochgeladene Bilder im Container:** `/var/lib/bike-archiv/uploads`
+- **Vorab-Backups im Container:** `/var/lib/bike-archiv/backups`
 - **Konfiguration im Container:** `/etc/bike-archiv/bike-archiv.env`
 - **Status prüfen:** `pct exec <CTID> -- systemctl status bike-archiv`
 - **Logs ansehen:** `pct exec <CTID> -- journalctl -u bike-archiv -f`
-- **Update einspielen (inkl. Vorab-Backup & Rollback-Schutz):** `pct exec <CTID> -- bike-archiv-update`
+- **Update vom Proxmox-Host (inkl. Auto-Erkennung & optional `--snapshot`):**
+  ```bash
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/MTBSchaf/Bike-Archiv/main/deploy/proxmox/proxmox-update.sh)"
+  ```
+- **Update im Container (inkl. Vorab-Backup & Rollback-Schutz):** `pct exec <CTID> -- bike-archiv-update`
 - **Update nur prüfen:** `pct exec <CTID> -- bike-archiv-update --check`
+- **Auto-Update-Timer prüfen / aktivieren:** `pct exec <CTID> -- bike-archiv-update --auto-update-status` bzw. `--enable-auto-update`
 
 ## Update-System
 
 Alle künftigen Änderungen (Code, Datenbank-Schema, Komponenten-Katalog und Produktbilder) lassen sich unter Erhalt aller Nutzerdaten als Update einspielen:
 
-- **Proxmox / Server-CLI:** `bike-archiv-update` bzw. `./deploy/proxmox/update.sh` erstellt vorab ein SQLite-Backup, zieht den aktuellen Stand per Git, baut neu, startet den Dienst und rollt bei Fehlern automatisch zurück.
-- **Weboberfläche (Update-Center):** Über den Button **Updates** im Header lassen sich verfügbare Git-Updates prüfen, der interne Hersteller-Katalog synchronisieren sowie inkrementelle `.json`-Update-Pakete ohne Überschreiben eigener Seriennummern oder Notizen einspielen.
+- **Automatische Proxmox-Updates (systemd-Timer):** Neue Container prüfen standardmäßig täglich um `04:00:00` automatisch auf neue Commits auf `main`, legen vor dem Update ein WAL-sicheres SQLite-Backup an (14 Versionen Aufbewahrung) und rollen bei Fehlern automatisch zurück. Bestehende Container lassen sich per `proxmox-update.sh -- --enable-auto-update` nachrüsten. Details siehe [Proxmox-Update-Strategie](docs/PROXMOX-UPDATE.md).
+- **Weboberfläche (Update-Center):** Über den Button **Updates** in der linken Seitenleiste lassen sich verfügbare Git-Updates prüfen, der interne Hersteller-Katalog synchronisieren sowie inkrementelle `.json`-Update-Pakete ohne Überschreiben eigener Seriennummern oder Notizen einspielen.
 
 ## Direkter Server-Betrieb (Node.js)
 
@@ -77,10 +83,16 @@ npm ci
 npm run dev
 npm run build
 npm test
+npm run check:repo
 ```
+
+## Repository-Hygiene
+
+Im GitHub-Repository wird ausschließlich das Server-Programm (Anwendungscode, Proxmox-Skripte, Tests und Dokumentation) zusammen mit dem bereits vorhandenen ersten Beispiel (**Specialized Status 160** in `server/seed.mjs`) gespeichert. Laufzeitdaten (`data/`, `uploads/`, `backups/`, `.sqlite`-Dateien, Nutzer-Backups oder Build-Archive) werden über `.gitignore` ausgeschlossen und durch `npm run check:repo` sowie in der CI automatisch verhindert.
 
 ## Repository & Zusammenarbeit
 
+- [Proxmox-Update-Strategie](docs/PROXMOX-UPDATE.md)
 - [Mitwirkung & Setup-Anleitung](CONTRIBUTING.md)
 - [Sicherheitsrichtlinie](SECURITY.md)
 - [Arbeitsanweisungen für KI-Agenten](.github/copilot-instructions.md)

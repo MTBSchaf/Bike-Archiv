@@ -3,15 +3,15 @@
 ## Projektüberblick & Tech-Stack
 - **Frontend (`src/`):** React 19, TypeScript, Vite (wird in `dist/` gebaut und durch den Node.js-Server ausgeliefert; Entwicklung mit Vite-Proxy auf `/api`).
 - **Backend (`server/`):** Zero-dependency Node.js (>= 22.5.0) HTTP-Server mit `node:sqlite` (`server/index.mjs`, `server/app.mjs`, `server/db.mjs`, `server/seed.mjs`, `server/validation.mjs`).
-- **Proxmox-Deployment (`deploy/proxmox/`):** Eigenständiges Ein-Befehl-Installationsskript `deploy/proxmox/install.sh` zur Einrichtung eines Debian-12-LXC-Containers mit interaktiver Abfrage von RAM, CPU-Kernen und Festplattengröße (restliche Container-Einstellungen automatisch).
-- **Tests (`tests/`):** Node Test Runner (`node --test tests/api.test.mjs tests/proxmox-installer.test.mjs`).
+- **Proxmox-Deployment (`deploy/proxmox/`):** Ein-Befehl-Installer `deploy/proxmox/install.sh` (fragt interaktiv nur RAM, CPU-Kerne und Festplattengröße ab), In-Container-Updater `deploy/proxmox/update.sh` (inkl. WAL-sicherem SQLite-Backup, Rotation, Auto-Update-Timer und Rollback) sowie Host-Updater `deploy/proxmox/proxmox-update.sh`. Siehe auch `docs/PROXMOX-UPDATE.md`.
+- **Tests (`tests/`):** Node Test Runner (`node --test tests/api.test.mjs tests/proxmox-installer.test.mjs tests/repo-hygiene.test.mjs`) sowie Hygiene-Prüfung `npm run check:repo`.
 
 ## Server-Only-Architektur & Konsistenz
 - Das Frontend kommuniziert über `src/api.ts` direkt mit den REST-Endpunkten unter `/api/*`. Es existiert kein lokaler `localStorage`-Store mehr.
 - Änderungen an Datenmodell, Validierungsregeln oder Backup-Format in `server/` (`server/db.mjs`, `server/app.mjs`, `server/validation.mjs`) und den entsprechenden Typen/Validierungen im Frontend (`src/types.ts`, `src/validation.ts`, `src/api.ts`) konsistent halten.
 
 ## Fachliche Invarianten
-- **Initialer Seed:** Specialized Status 160 (`SPECIALIZED_STATUS_160_ID`) mit 21 verbauten Teilen (`status: 'in_use'`). Nach manuellem Löschen darf kein automatischer Re-Seed stattfinden.
+- **Initialer Seed & Repo-Hygiene:** Specialized Status 160 (`SPECIALIZED_STATUS_160_ID`) mit 60 verbauten Teilen (`status: 'in_use'`) ist das einzige Beispiel im Repository. Nach manuellem Löschen darf kein automatischer Re-Seed stattfinden. Es dürfen niemals echte Nutzerdaten, Seriennummern, SQLite-Datenbanken, Uploads, Backups oder Archive ins Git-Repository gelangen (`npm run check:repo`).
 - **Teile-Status:** `in_use` erfordert eine gültige `bikeId`. Ein Statuswechsel auf `in_stock` oder `defective` setzt `bikeId` auf `null`.
 - **Bike-Löschung:** Beim Löschen eines Bikes werden alle dort verbauten Teile auf `in_stock` (`bikeId: null`) verschoben.
 - **Backup-Import:** `POST /api/import` ersetzt den Bestand nach vollständiger Validierung atomar.
